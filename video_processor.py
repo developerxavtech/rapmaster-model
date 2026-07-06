@@ -355,8 +355,9 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
             mag = (_math.sqrt(ax*ax + ay*ay) * _math.sqrt(cx*cx + cy*cy)) + 1e-6
             return _math.degrees(_math.acos(max(-1.0, min(1.0, dot / mag))))
 
-        # Wrong-exercise detection — track knee angle for every analyzed frame.
+        # Wrong-exercise detection — track knee angle and body orientation.
         knee_angles_tracked = []
+        body_orientation_tracked = []  # 'standing' or 'lying'
 
         frame_count = 0
         analyze_skip = max(1, int(fps / 8))  # Analyze at ~8 fps
@@ -407,6 +408,26 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
                         l_ka = _angle3(lm[23], lm[25], lm[27])
                         r_ka = _angle3(lm[24], lm[26], lm[28])
                         knee_angles_tracked.append(l_ka if lv >= rv else r_ka)
+
+                    # ── Body orientation (standing vs lying) ──────────────────
+                    # MediaPipe y increases downward. For a standing person,
+                    # shoulder_y < hip_y. For someone lying flat, shoulder_y ≈ hip_y
+                    # and the difference in x is large instead.
+                    sh_vis = (lm[11].visibility + lm[12].visibility) / 2
+                    hp_vis = (lm[23].visibility + lm[24].visibility) / 2
+                    if sh_vis > 0.4 and hp_vis > 0.4:
+                        sh_y = (lm[11].y + lm[12].y) / 2
+                        hp_y = (lm[23].y + lm[24].y) / 2
+                        sh_x = (lm[11].x + lm[12].x) / 2
+                        hp_x = (lm[23].x + lm[24].x) / 2
+                        dy = abs(hp_y - sh_y)
+                        dx = abs(hp_x - sh_x)
+                        # Standing: large vertical separation (dy > dx)
+                        # Lying: large horizontal separation (dx > dy) or dy very small
+                        if dy > 0.12 and dy > dx * 0.8:
+                            body_orientation_tracked.append('standing')
+                        elif dx > dy or dy < 0.08:
+                            body_orientation_tracked.append('lying')
 
                     # ── Collect shoulder Y for deadlift post-processing ───────
                     if exercise_type == 'deadlift':
@@ -548,12 +569,47 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
         # is unreliable for deadlift and causes too many false positives.
         results['wrong_exercise'] = False
         results['wrong_exercise_message'] = ''
-        if exercise_type == 'squat' and knee_angles_tracked:
+
+        # Standing exercises that require an upright body
+        STANDING_EXERCISES = {
+            'squat', 'deadlift', 'lunge', 'side_lunge', 'calf_raise',
+            'high_knees', 'jumping_jack', 'mountain_climber', 'wall_sit',
+            'shoulder_press', 'lateral_raise', 'bicep_curl', 'hammer_curl',
+            'tricep_dip', 'leg_raise'
+        }
+        # Exercises done lying/horizontal
+        LYING_EXERCISES = {'bench_press', 'push_up', 'plank', 'glute_bridge'}
+
+        # ── Body orientation check ────────────────────────────────────────────
+        if body_orientation_tracked:
+            n_orient = len(body_orientation_tracked)
+            lying_ratio = body_orientation_tracked.count('lying') / n_orient
+            log(f"[WrongExercise] orientation — lying_ratio={lying_ratio:.2f} samples={n_orient}")
+
+            if exercise_type in STANDING_EXERCISES and lying_ratio > 0.5:
+                results['wrong_exercise'] = True
+                results['wrong_exercise_message'] = (
+                    f"Wrong exercise: you appear to be lying down but selected '{exercise_type}' "
+                    f"which requires a standing position. Did you mean bench_press or push_up?"
+                )
+                results['reps'] = 0
+                log(f"[WrongExercise] DETECTED (lying down for standing exercise)")
+
+            elif exercise_type in LYING_EXERCISES and lying_ratio < 0.3:
+                results['wrong_exercise'] = True
+                results['wrong_exercise_message'] = (
+                    f"Wrong exercise: you appear to be standing but selected '{exercise_type}' "
+                    f"which requires a lying/horizontal position."
+                )
+                results['reps'] = 0
+                log(f"[WrongExercise] DETECTED (standing for lying exercise)")
+
+        # ── Knee angle check for squat (secondary check) ─────────────────────
+        if not results['wrong_exercise'] and exercise_type == 'squat' and knee_angles_tracked:
             n = len(knee_angles_tracked)
             avg_knee = sum(knee_angles_tracked) / n
             min_knee = min(knee_angles_tracked)
-            log(f"[WrongExercise] squat check — avg_knee={avg_knee:.1f}° min_knee={min_knee:.1f}° samples={n}")
-            # Flag if average knee angle never came close to squat depth
+            log(f"[WrongExercise] squat knee check — avg={avg_knee:.1f}° min={min_knee:.1f}° samples={n}")
             if avg_knee > 145 and min_knee > 120:
                 results['wrong_exercise'] = True
                 results['wrong_exercise_message'] = (

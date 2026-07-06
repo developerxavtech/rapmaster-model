@@ -1,8 +1,8 @@
 [phases.setup]
-aptPkgs = [
-  "libgl1",
-  "libglib2.0-0",
-  "libsm6",
-  "libxext6",
-  "libxrender1"
-]
+nixPkgs = ["python312", "ffmpeg", "libGL", "libGLU", "glib"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "gunicorn app:app --workers 1 --threads 4 --timeout 300 --bind 0.0.0.0:$PORT"
