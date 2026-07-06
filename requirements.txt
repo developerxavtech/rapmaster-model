@@ -2,7 +2,7 @@
 flask>=2.0.0
 flask-cors>=4.0.0
 gunicorn>=21.2.0
-opencv-python>=4.5.0
+opencv-python-headless>=4.5.0
 mediapipe>=0.10.0
 numpy>=1.21.0
 pyyaml>=6.0.0
