@@ -64,7 +64,7 @@ logger.info("Setting up Flask application")
 app = Flask(__name__)
 @app.route("/")
 def home():
-return {"status": "API running"}
+    return {"status": "API running"}
 app.secret_key = 'fitness_trainer_secret_key'  # Required for sessions
 CORS(app)  # Allow React Native app to call this server from a different origin
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200MB max upload
