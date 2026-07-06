@@ -5,10 +5,10 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # Suppress TF warnings
-
+cv2 = None
 from flask import Flask, render_template, Response, request, jsonify, session, redirect, url_for
 from flask_cors import CORS
-import cv2
+# import cv2
 import threading
 import time
 import sys
@@ -93,6 +93,8 @@ MAX_VIDEO_SIZE_MB = 200  # Max 200MB video
 MAX_VIDEO_DURATION_SEC = 120  # Max 2 minutes
 
 def initialize_camera():
+    global cv2
+    import cv2
     global camera
     if camera is None:
         try:
@@ -129,6 +131,8 @@ def get_pose_estimator():
         return _pose_estimator
 
 def generate_frames():
+    global cv2
+    import cv2
     global output_frame, lock, exercise_running, exercise_engine
     global exercise_goal, sets_completed, sets_goal
     global fps_counter, fps_start_time, current_fps
