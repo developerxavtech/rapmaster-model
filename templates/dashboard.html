@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fitness Tracker Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Fitness Tracker Dashboard</h1>
+            <p>Track your workout progress</p>
+            <nav class="main-nav">
+                <ul>
+                    <li><a href="/" class="nav-link">Home</a></li>
+                    <li><a href="/dashboard" class="nav-link active">Dashboard</a></li>
+                    <li><a href="/profile" class="nav-link">Profile</a></li>
+                </ul>
+            </nav>
+        </header>
+        
+        <div class="dashboard-content">
+            <div class="stats-summary">
+                <div class="stat-card">
+                    <h3>Total Workouts</h3>
+                    <p class="stat-value">{{ total_workouts }}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Exercises</h3>
+                    <p class="stat-value">{{ total_exercises }}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>This Week</h3>
+                    <p class="stat-value">{{ weekly_workouts }}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Streak</h3>
+                    <p class="stat-value">{{ streak_days }} days</p>
+                </div>
+            </div>
+            
+            <div class="charts-container">
+                <div class="chart-card">
+                    <h3>Weekly Activity</h3>
+                    <canvas id="weeklyChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>Exercise Distribution</h3>
+                    <canvas id="exerciseChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="recent-workouts">
+                <h2>Recent Workouts</h2>
+                <table class="workout-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Exercise</th>
+                            <th>Sets</th>
+                            <th>Reps</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for workout in recent_workouts %}
+                        <tr>
+                            <td>{{ workout.date }}</td>
+                            <td>{{ workout.exercise }}</td>
+                            <td>{{ workout.sets }}</td>
+                            <td>{{ workout.reps }}</td>
+                            <td>{{ workout.duration }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Sample data for charts - would be replaced with data from backend
+        const weeklyData = {
+            labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+            datasets: [{
+                label: 'Workout Minutes',
+                data: [30, 45, 0, 60, 20, 0, 45],
+                backgroundColor: 'rgba(52, 152, 219, 0.5)',
+                borderColor: 'rgba(52, 152, 219, 1)',
+                borderWidth: 1
+            }]
+        };
+        
+        const exerciseData = {
+            labels: ['Squats', 'Push Ups', 'Hammer Curls'],
+            datasets: [{
+                data: [40, 35, 25],
+                backgroundColor: [
+                    'rgba(52, 152, 219, 0.7)',
+                    'rgba(46, 204, 113, 0.7)',
+                    'rgba(155, 89, 182, 0.7)'
+                ],
+                borderColor: [
+                    'rgba(52, 152, 219, 1)',
+                    'rgba(46, 204, 113, 1)',
+                    'rgba(155, 89, 182, 1)'
+                ],
+                borderWidth: 1
+            }]
+        };
+        
+        // Initialize charts
+        window.addEventListener('DOMContentLoaded', () => {
+            const weeklyChart = new Chart(
+                document.getElementById('weeklyChart'),
+                {
+                    type: 'bar',
+                    data: weeklyData,
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                }
+            );
+            
+            const exerciseChart = new Chart(
+                document.getElementById('exerciseChart'),
+                {
+                    type: 'doughnut',
+                    data: exerciseData,
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                            }
+                        }
+                    }
+                }
+            );
+        });
+    </script>
+</body>
+</html>

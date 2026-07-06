@@ -1,0 +1,72 @@
+name: deadlift
+display_name: "Deadlift"
+type: repetition
+
+target_muscles:
+  - Hamstrings
+  - Glutes
+  - Lower Back
+equipment: "Bodyweight or Barbell"
+difficulty: intermediate
+default_reps: 5
+default_sets: 3
+description: "Hip hinge movement — pull weight off floor by extending hips and knees"
+
+# Hip hinge angle: shoulder → hip → knee
+# From the front this stays near 180° throughout (not useful for rep counting).
+# Rep counting is handled by the custom shoulder-drop detector in video_processor.py.
+# This angle IS used for form feedback below.
+angles:
+  primary:
+    points: [left_shoulder, left_hip, left_knee]
+    description: "Hip hinge angle (shoulder-hip-knee)"
+
+# State machine — kept for compatibility but rep counting is overridden externally.
+state_order:
+  - up
+  - hinge
+  - down
+
+states:
+  up:
+    condition: "angle > 155"
+    description: "Standing / lockout position"
+  hinge:
+    condition: "angle > 90 and angle <= 155"
+    description: "Hip hinge in progress"
+  down:
+    condition: "angle <= 90"
+    description: "Bottom of pull / fully hinged"
+
+counter:
+  trigger_state: up
+  from_state: hinge
+
+min_rep_duration: 0.8
+
+# Form feedback — biomechanically grounded for deadlift
+feedback:
+  rounded_back:
+    condition: "left_shoulder_y > left_hip_y + 10"
+    message: "Keep back flat — shoulders are dropping below hips"
+    severity: warning
+
+  hips_rising_too_fast:
+    condition: "left_shoulder_y > left_hip_y - 5 and angle < 130"
+    message: "Drive hips and shoulders up together — hips are shooting up"
+    severity: warning
+
+visualization:
+  lines:
+    - points: [left_shoulder, left_hip]
+      color: [0, 140, 255]
+      thickness: 4
+    - points: [left_hip, left_knee]
+      color: [0, 140, 255]
+      thickness: 4
+    - points: [right_shoulder, right_hip]
+      color: [255, 100, 0]
+      thickness: 4
+    - points: [right_hip, right_knee]
+      color: [255, 100, 0]
+      thickness: 4

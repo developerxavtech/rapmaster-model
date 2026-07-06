@@ -1,0 +1,138 @@
+.main-nav {
+    margin-top: 15px;
+}
+
+.main-nav ul {
+    display: flex;
+    list-style: none;
+    justify-content: center;
+    gap: 25px;
+}
+
+.nav-link {
+    text-decoration: none;
+    color: #555;
+    font-weight: 500;
+    padding: 8px 15px;
+    border-radius: 5px;
+    transition: all 0.3s;
+}
+
+.nav-link:hover {
+    color: #3498db;
+    background-color: rgba(52, 152, 219, 0.1);
+}
+
+.nav-link.active {
+    color: #3498db;
+    border-bottom: 2px solid #3498db;
+}
+
+.dashboard-content {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.stats-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: space-between;
+}
+
+.stat-card {
+    flex: 1 1 200px;
+    background-color: white;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    transition: transform 0.3s;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+
+.stat-card h3 {
+    font-size: 1rem;
+    color: #777;
+    margin-bottom: 10px;
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #3498db;
+}
+
+.charts-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.chart-card {
+    flex: 1 1 400px;
+    background-color: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.chart-card h3 {
+    font-size: 1.2rem;
+    color: #555;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.recent-workouts {
+    background-color: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.recent-workouts h2 {
+    font-size: 1.5rem;
+    color: #3a3a3a;
+    margin-bottom: 15px;
+}
+
+.workout-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.workout-table th,
+.workout-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.workout-table th {
+    background-color: #f9f9f9;
+    color: #555;
+    font-weight: 500;
+}
+
+.workout-table tr:hover {
+    background-color: #f5f5f5;
+}
+
+@media (max-width: 768px) {
+    .stats-summary {
+        flex-direction: column;
+    }
+    
+    .charts-container {
+        flex-direction: column;
+    }
+    
+    .workout-table {
+        font-size: 0.9rem;
+    }
+}

@@ -1,0 +1,584 @@
+/* Video Analysis Page Styles */
+
+.nav-links {
+    margin-top: 15px;
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+}
+
+.nav-link {
+    color: #3498db;
+    text-decoration: none;
+    padding: 8px 16px;
+    border-radius: 20px;
+    background-color: #e8f4fc;
+    transition: all 0.3s;
+}
+
+.nav-link:hover {
+    background-color: #3498db;
+    color: white;
+}
+
+/* Main Layout */
+.main-content {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.video-panel {
+    flex: 2;
+    min-width: 500px;
+}
+
+.analysis-panel {
+    flex: 1;
+    min-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* Video Container */
+.video-container {
+    background-color: #1a1a2e;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    min-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.upload-area {
+    text-align: center;
+    padding: 40px;
+    color: #888;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: 2px dashed #444;
+    border-radius: 10px;
+    margin: 20px;
+    width: calc(100% - 40px);
+}
+
+.upload-area:hover {
+    border-color: #3498db;
+    background-color: rgba(52, 152, 219, 0.1);
+}
+
+.upload-area.dragover {
+    border-color: #27ae60;
+    background-color: rgba(39, 174, 96, 0.1);
+}
+
+.upload-icon {
+    font-size: 4rem;
+    margin-bottom: 15px;
+}
+
+.upload-area h3 {
+    color: #ccc;
+    margin-bottom: 10px;
+}
+
+.upload-area p {
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+}
+
+#video-player, #analysis-canvas {
+    width: 100%;
+    max-height: 500px;
+    object-fit: contain;
+}
+
+#analysis-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+}
+
+/* Video Controls */
+.video-controls {
+    background-color: white;
+    border-radius: 10px;
+    padding: 15px;
+    margin-top: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.progress-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 8px;
+    background-color: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3498db, #27ae60);
+    width: 0%;
+    transition: width 0.3s;
+}
+
+#progress-text {
+    min-width: 45px;
+    font-weight: 600;
+    color: #555;
+}
+
+.control-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.control-buttons .btn {
+    flex: 1;
+    min-width: 100px;
+}
+
+/* Sections */
+.section {
+    background-color: white;
+    border-radius: 10px;
+    padding: 15px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.section h2 {
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+    color: #333;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 5px;
+}
+
+/* Exercise Dropdown */
+.exercise-dropdown {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+    background-color: white;
+    cursor: pointer;
+    transition: border-color 0.3s;
+}
+
+.exercise-dropdown:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.exercise-info-mini {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    border-left: 3px solid #3498db;
+}
+
+.exercise-info-mini.hidden {
+    display: none;
+}
+
+.mini-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: white;
+    margin-bottom: 5px;
+}
+
+.mini-badge.standard { background-color: #3498db; }
+.mini-badge.bilateral { background-color: #9b59b6; }
+.mini-badge.duration { background-color: #e67e22; }
+
+#mini-description {
+    font-size: 0.85rem;
+    color: #666;
+    margin: 0;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    color: white;
+}
+
+.stat-label {
+    display: block;
+    font-size: 0.75rem;
+    opacity: 0.9;
+    margin-bottom: 5px;
+}
+
+.stat-value {
+    display: block;
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+.stat-value.small {
+    font-size: 1rem;
+}
+
+.stat-value.grade {
+    padding: 5px 15px;
+    border-radius: 5px;
+    background-color: rgba(255,255,255,0.2);
+}
+
+/* Gauge */
+.gauge-container {
+    position: relative;
+    width: 200px;
+    height: 120px;
+    margin: 0 auto;
+}
+
+.gauge {
+    width: 100%;
+    height: 100%;
+}
+
+.gauge-bg {
+    fill: none;
+    stroke: #e0e0e0;
+    stroke-width: 15;
+    stroke-linecap: round;
+}
+
+.gauge-fill {
+    fill: none;
+    stroke: #27ae60;
+    stroke-width: 15;
+    stroke-linecap: round;
+    stroke-dasharray: 251.2;
+    stroke-dashoffset: 251.2;
+    transition: stroke-dashoffset 0.5s, stroke 0.5s;
+}
+
+.gauge-value {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 2rem;
+    font-weight: 700;
+    color: #333;
+}
+
+/* Feedback Log */
+.feedback-log {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 5px;
+}
+
+.feedback-item {
+    display: flex;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee;
+    font-size: 0.85rem;
+}
+
+.feedback-item:last-child {
+    border-bottom: none;
+}
+
+.feedback-item.warning {
+    background-color: #fff3cd;
+    border-left: 3px solid #ffc107;
+}
+
+.feedback-item.error {
+    background-color: #f8d7da;
+    border-left: 3px solid #dc3545;
+}
+
+.feedback-item.success {
+    background-color: #d4edda;
+    border-left: 3px solid #28a745;
+}
+
+.feedback-item.info {
+    background-color: #e7f3ff;
+    border-left: 3px solid #3498db;
+}
+
+.feedback-time {
+    color: #888;
+    font-family: monospace;
+    min-width: 45px;
+}
+
+.feedback-text {
+    flex: 1;
+    color: #333;
+}
+
+/* Report Section */
+.report-section {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    color: white;
+}
+
+.report-section h2 {
+    color: white;
+    border-bottom-color: rgba(255,255,255,0.3);
+}
+
+.report-content {
+    background-color: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.report-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+
+.report-row:last-child {
+    border-bottom: none;
+}
+
+.report-label {
+    opacity: 0.9;
+}
+
+.report-value {
+    font-weight: 700;
+}
+
+#download-report-btn {
+    width: 100%;
+    background-color: white;
+    color: #11998e;
+}
+
+#download-report-btn:hover {
+    background-color: #f0f0f0;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .video-panel {
+        min-width: 100%;
+    }
+    
+    .analysis-panel {
+        min-width: 100%;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .control-buttons {
+        flex-direction: column;
+    }
+    
+    .control-buttons .btn {
+        width: 100%;
+    }
+}
+
+/* ==================== Terminal/Log Section ==================== */
+.terminal-section {
+    margin-top: 20px;
+    background: linear-gradient(145deg, #1a1a2e, #16213e);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.terminal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.terminal-title {
+    font-weight: 600;
+    color: #00d4aa;
+    font-size: 0.9rem;
+}
+
+.terminal-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.terminal-status {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: rgba(100, 100, 100, 0.3);
+    color: #888;
+}
+
+.terminal-status.running {
+    background: rgba(0, 200, 100, 0.2);
+    color: #00d4aa;
+    animation: pulse-status 1.5s infinite;
+}
+
+.terminal-status.success {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+.terminal-status.error {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+@keyframes pulse-status {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.terminal-toggle {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 0.9rem;
+    transition: transform 0.3s;
+}
+
+.terminal-toggle:hover {
+    color: #fff;
+}
+
+.terminal-toggle.collapsed {
+    transform: rotate(-90deg);
+}
+
+.terminal-body {
+    max-height: 200px;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.terminal-body.collapsed {
+    max-height: 0;
+}
+
+.terminal-content {
+    padding: 12px 16px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.8rem;
+    max-height: 180px;
+    overflow-y: auto;
+    line-height: 1.6;
+}
+
+.terminal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.terminal-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.terminal-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.log-line {
+    padding: 2px 0;
+    color: #b0b0b0;
+    display: flex;
+    gap: 8px;
+}
+
+.log-line .timestamp {
+    color: #666;
+    min-width: 70px;
+}
+
+.log-line.info {
+    color: #3498db;
+}
+
+.log-line.success {
+    color: #2ecc71;
+}
+
+.log-line.warning {
+    color: #f39c12;
+}
+
+.log-line.error {
+    color: #e74c3c;
+}
+
+.log-line.processing {
+    color: #00d4aa;
+}
+
+.log-line.progress {
+    color: #9b59b6;
+}
+
+/* Progress indicator in terminal */
+.log-progress {
+    display: inline-block;
+    margin-left: 8px;
+    color: #00d4aa;
+}
+
+.log-spinner {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

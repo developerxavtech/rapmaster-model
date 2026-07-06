@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Analysis - Fitness Trainer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/video_analysis.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 Video Analysis</h1>
+            <p>Upload a video to analyze your exercise form</p>
+            <nav class="nav-links">
+                <a href="/" class="nav-link">← Live Camera</a>
+                <a href="/dashboard" class="nav-link">📊 Dashboard</a>
+            </nav>
+        </header>
+        
+        <div class="main-content">
+            <!-- Left Panel - Video Player -->
+            <div class="video-panel">
+                <div class="video-container" id="video-container">
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-icon">📁</div>
+                        <h3>Drop video here or click to upload</h3>
+                        <p>Supports: MP4, AVI, MOV, WebM</p>
+                        <input type="file" id="video-input" accept="video/*" hidden>
+                        <button class="btn primary-btn" id="browse-btn">Browse Files</button>
+                    </div>
+                    <video id="video-player" controls hidden>
+                        Your browser does not support the video tag.
+                    </video>
+                    <canvas id="analysis-canvas" hidden></canvas>
+                </div>
+                
+                <div class="video-controls">
+                    <div class="progress-container">
+                        <div class="progress-bar" id="analysis-progress">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <span id="progress-text">0%</span>
+                    </div>
+                    <div class="control-buttons">
+                        <button class="btn" id="play-btn" disabled>▶️ Play</button>
+                        <button class="btn" id="analyze-btn" disabled>🔍 Start Analysis</button>
+                        <button class="btn" id="stop-analysis-btn" disabled>⏹️ Stop</button>
+                        <button class="btn" id="reset-btn" disabled>🔄 Reset</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Panel - Controls & Results -->
+            <div class="analysis-panel">
+                <!-- Exercise Selection -->
+                <div class="section exercise-selection">
+                    <h2>Select Exercise</h2>
+                    <select id="exercise-select" class="exercise-dropdown">
+                        <option value="">-- Select Exercise --</option>
+                    </select>
+                    <div id="exercise-info-panel" class="exercise-info-mini hidden">
+                        <span id="mini-type" class="mini-badge"></span>
+                        <p id="mini-description"></p>
+                    </div>
+                </div>
+                
+                <!-- Real-time Stats -->
+                <div class="section stats-section">
+                    <h2>📊 Live Statistics</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <span class="stat-label">Repetitions</span>
+                            <span class="stat-value" id="stat-reps">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Form Score</span>
+                            <span class="stat-value" id="stat-score">--</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Grade</span>
+                            <span class="stat-value grade" id="stat-grade">--</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Current State</span>
+                            <span class="stat-value small" id="stat-state">--</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Form Score Gauge -->
+                <div class="section gauge-section">
+                    <h2>Form Quality</h2>
+                    <div class="gauge-container">
+                        <svg class="gauge" viewBox="0 0 200 120">
+                            <path class="gauge-bg" d="M 20 100 A 80 80 0 0 1 180 100" />
+                            <path class="gauge-fill" id="gauge-fill" d="M 20 100 A 80 80 0 0 1 180 100" />
+                        </svg>
+                        <div class="gauge-value" id="gauge-value">--</div>
+                    </div>
+                </div>
+                
+                <!-- Feedback Log -->
+                <div class="section feedback-section">
+                    <h2>💬 Form Feedback</h2>
+                    <div class="feedback-log" id="feedback-log">
+                        <div class="feedback-item info">
+                            <span class="feedback-time">--:--</span>
+                            <span class="feedback-text">Upload a video and start analysis to see feedback</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Final Report -->
+                <div class="section report-section hidden" id="report-section">
+                    <h2>📋 Analysis Report</h2>
+                    <div class="report-content" id="report-content">
+                        <!-- Filled by JS after analysis -->
+                    </div>
+                    <button class="btn primary-btn" id="download-report-btn">📥 Download Report</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Processing Terminal Log -->
+        <div class="terminal-section" id="terminal-section">
+            <div class="terminal-header">
+                <span class="terminal-title">📟 Processing Log</span>
+                <div class="terminal-controls">
+                    <span class="terminal-status" id="terminal-status">● Idle</span>
+                    <button class="terminal-toggle" id="terminal-toggle">▼</button>
+                </div>
+            </div>
+            <div class="terminal-body" id="terminal-body">
+                <div class="terminal-content" id="terminal-content">
+                    <div class="log-line info">[System] Ready for video analysis...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/video_analysis.js') }}"></script>
+</body>
+</html>

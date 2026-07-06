@@ -1,0 +1,72 @@
+name: bench_press
+display_name: "Bench Press"
+type: repetition
+
+target_muscles:
+  - Chest
+  - Triceps
+  - Front Deltoids
+equipment: "Barbell or Dumbbells"
+difficulty: intermediate
+default_reps: 5
+default_sets: 3
+description: "Horizontal press — lower bar to chest and press back to full arm extension"
+
+# Primary angle: shoulder → elbow → wrist (elbow angle)
+# From a side-view camera this clearly shows the press range of motion.
+angles:
+  primary:
+    points: [left_shoulder, left_elbow, left_wrist]
+    description: "Left elbow angle"
+  right_arm:
+    points: [right_shoulder, right_elbow, right_wrist]
+    description: "Right elbow angle"
+
+state_order:
+  - pressing
+  - up
+
+states:
+  up:
+    condition: "angle > 145"
+    description: "Arms extended — lockout"
+  pressing:
+    condition: "angle <= 145"
+    description: "Elbow bent — any point in the press"
+
+# Count each lockout (pressing → up).
+# min_rep_duration blocks the false re-entry that occurs when the lifter
+# pauses at lockout and their arms drift slightly below 145° then back up.
+# The user's rep pace is ~6 s, so 4.0 s safely separates real reps from
+# oscillations without missing any.
+counter:
+  trigger_state: up
+  from_state: pressing
+
+min_rep_duration: 4.0
+
+feedback:
+  incomplete_extension:
+    condition: "angle < 145 and angle > 110"
+    message: "Lock out fully at the top — extend arms completely"
+    severity: warning
+
+  too_fast:
+    condition: "angle < 90"
+    message: "Control the descent — lower slowly to chest"
+    severity: info
+
+visualization:
+  lines:
+    - points: [left_shoulder, left_elbow]
+      color: [0, 100, 255]
+      thickness: 3
+    - points: [left_elbow, left_wrist]
+      color: [0, 100, 255]
+      thickness: 3
+    - points: [right_shoulder, right_elbow]
+      color: [255, 100, 0]
+      thickness: 3
+    - points: [right_elbow, right_wrist]
+      color: [255, 100, 0]
+      thickness: 3

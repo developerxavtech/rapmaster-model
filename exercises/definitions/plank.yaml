@@ -1,0 +1,105 @@
+# Plank Exercise Definition
+# Süre bazlı egzersiz
+
+name: plank
+display_name: "Plank"
+type: duration  # Süre bazlı egzersiz
+
+# Meta bilgiler
+target_muscles:
+  - Core
+  - Shoulders
+  - Back
+equipment: "Bodyweight"
+difficulty: beginner
+default_reps: 3  # 3 set
+default_sets: 1
+target_duration: 30  # Her set 30 saniye
+rest_time: "30 seconds"
+benefits:
+  - "Strengthens core muscles"
+  - "Improves posture"
+  - "Builds shoulder stability"
+description: "Isometric plank hold for core strength"
+
+# Süre bazlı ayarlar
+hold_state: hold  # Hangi state'de süre sayılacak
+
+# Açı tanımları
+angles:
+  body_line:
+    points: [left_shoulder, left_hip, left_ankle]
+    description: "Vücut hattı açısı"
+  
+  arm_angle:
+    points: [left_shoulder, left_elbow, left_wrist]
+    description: "Kol açısı"
+
+# Durum makinesi
+state_order:
+  - hold
+  - setup
+  - rest
+
+states:
+  rest:
+    condition: "body_line_angle < 140"
+    description: "Dinlenme pozisyonu"
+  
+  setup:
+    condition: "body_line_angle >= 140 and body_line_angle < 165"
+    description: "Hazırlık pozisyonu"
+  
+  hold:
+    condition: "body_line_angle >= 165"
+    description: "Plank pozisyonu - süre sayılır"
+
+# Form geri bildirimleri
+feedback:
+  hips_too_high:
+    condition: "body_line_angle > 185"
+    message: "Kalçanız çok yukarıda! Vücudunuzu düz hale getirin."
+    severity: warning
+  
+  hips_sagging:
+    condition: "body_line_angle < 165 and body_line_angle > 140"
+    message: "Kalçanız düşüyor! Core kaslarınızı sıkın."
+    severity: warning
+  
+  good_form:
+    condition: "body_line_angle >= 170 and body_line_angle <= 180"
+    message: "Mükemmel form! Devam edin."
+    severity: info
+
+calibration:
+  enabled: false
+
+smoothing:
+  enabled: true
+  window: 5
+
+visualization:
+  lines:
+    - points: [left_shoulder, left_hip]
+      color: [0, 255, 0]
+      thickness: 3
+    - points: [left_hip, left_ankle]
+      color: [0, 255, 0]
+      thickness: 3
+    - points: [left_shoulder, left_elbow]
+      color: [0, 200, 255]
+      thickness: 2
+    - points: [left_elbow, left_wrist]
+      color: [0, 200, 255]
+      thickness: 2
+  
+  circles:
+    - point: left_shoulder
+      color: [0, 255, 0]
+      radius: 8
+    - point: left_hip
+      color: [0, 255, 0]
+      radius: 8
+    - point: left_ankle
+      color: [0, 255, 0]
+      radius: 8

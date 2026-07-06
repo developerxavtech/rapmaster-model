@@ -1,0 +1,133 @@
+# Squat Exercise Definition
+# Hedef kaslar: Quadriceps, Gluteus, Hamstrings
+
+name: squat
+display_name: "Squat"
+type: repetition
+
+# Meta bilgiler
+target_muscles:
+  - Quadriceps
+  - Gluteus
+  - Hamstrings
+equipment: "Bodyweight or Barbell"
+difficulty: beginner
+default_reps: 10
+default_sets: 3
+rest_time: "60 seconds"
+benefits:
+  - "Builds lower body strength"
+  - "Improves mobility and balance"
+  - "Strengthens core muscles"
+description: "Basic squat exercise targeting lower body muscles"
+
+# Açı tanımları
+angles:
+  primary:
+    points: [left_shoulder, left_hip, left_knee]
+    description: "Sol taraf gövde-bacak açısı"
+  
+  right_side:
+    points: [right_shoulder, right_hip, right_knee]
+    description: "Sağ taraf gövde-bacak açısı"
+
+# Durum makinesi (FSM)
+# State sırası önemli - ilk eşleşen state aktif olur
+state_order:
+  - ascent
+  - descent
+  - start
+
+states:
+  start:
+    condition: "angle > 165"
+    description: "Başlangıç pozisyonu - dik duruş"
+  
+  descent:
+    condition: "angle > 90 and angle <= 165"
+    description: "İniş aşaması"
+  
+  ascent:
+    condition: "angle <= 90"
+    description: "En alt nokta - sayaç artırılır"
+
+# Sayaç kuralı
+counter:
+  trigger_state: ascent
+  from_state: descent  # Sadece descent'ten geldiyse say
+
+# Zaman filtresi
+min_rep_duration: 0.8  # Minimum tekrar süresi (saniye)
+
+# Form geri bildirimleri
+feedback:
+  knees_caving:
+    condition: "left_knee_x < left_ankle_x - 20"
+    message: "Dizler içe kaçıyor! Dizleri ayak hizasında tutun."
+    severity: warning
+  
+  leaning_forward:
+    condition: "left_shoulder_x > left_hip_x + 50"
+    message: "Çok öne eğiliyorsunuz! Göğsünüzü dik tutun."
+    severity: warning
+  
+  not_deep_enough:
+    condition: "angle > 100 and angle < 130"
+    message: "Daha derine inin!"
+    severity: info
+
+# Kalibrasyon ayarları
+calibration:
+  enabled: true
+  reps: 3
+
+# Smoothing ayarları
+smoothing:
+  enabled: true
+  window: 3
+
+# Görselleştirme ayarları
+visualization:
+  lines:
+    - points: [left_shoulder, left_hip]
+      color: [178, 102, 255]
+      thickness: 2
+    - points: [left_hip, left_knee]
+      color: [178, 102, 255]
+      thickness: 2
+    - points: [right_shoulder, right_hip]
+      color: [51, 153, 255]
+      thickness: 2
+    - points: [right_hip, right_knee]
+      color: [51, 153, 255]
+      thickness: 2
+  
+  circles:
+    - point: left_shoulder
+      color: [178, 102, 255]
+      radius: 8
+    - point: left_hip
+      color: [178, 102, 255]
+      radius: 8
+    - point: left_knee
+      color: [178, 102, 255]
+      radius: 8
+    - point: right_shoulder
+      color: [51, 153, 255]
+      radius: 8
+    - point: right_hip
+      color: [51, 153, 255]
+      radius: 8
+    - point: right_knee
+      color: [51, 153, 255]
+      radius: 8
+  
+  angle_display:
+    - angle: primary
+      position: left_knee
+      offset: [10, -10]
+      label: "Angle Left"
+    - angle: right_side
+      position: right_knee
+      offset: [10, -10]
+      label: "Angle Right"

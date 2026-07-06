@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - Fitness Trainer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏋️ Fitness Trainer</h1>
+            <p>Your Personal Workout Profile</p>
+            <nav class="main-nav">
+                <ul>
+                    <li><a href="/" class="nav-link">Home</a></li>
+                    <li><a href="/video_analysis" class="nav-link">Video Analysis</a></li>
+                    <li><a href="/dashboard" class="nav-link">Dashboard</a></li>
+                    <li><a href="/profile" class="nav-link active">Profile</a></li>
+                </ul>
+            </nav>
+        </header>
+        
+        <div class="profile-content">
+            <!-- Profile Header -->
+            <div class="profile-header">
+                <div class="profile-avatar">
+                    <div class="avatar-circle" id="avatar-circle">
+                        <span id="avatar-initials">{{ user.initials or 'FT' }}</span>
+                    </div>
+                    <button class="change-avatar-btn" id="change-avatar-btn">📷</button>
+                </div>
+                <div class="profile-info">
+                    <h2 id="profile-name">{{ user.name or 'Fitness Enthusiast' }}</h2>
+                    <p class="profile-title">{{ user.title or 'Amateur Athlete' }}</p>
+                    <p class="member-since">Member since {{ user.joined or 'January 2026' }}</p>
+                </div>
+                <button class="edit-profile-btn" id="edit-profile-btn">✏️ Edit Profile</button>
+            </div>
+            
+            <!-- Stats Overview -->
+            <div class="profile-stats">
+                <div class="stat-box">
+                    <span class="stat-icon">🏆</span>
+                    <span class="stat-number" id="total-workouts">{{ stats.total_workouts or 0 }}</span>
+                    <span class="stat-label">Total Workouts</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-icon">💪</span>
+                    <span class="stat-number" id="total-reps">{{ stats.total_reps or 0 }}</span>
+                    <span class="stat-label">Total Reps</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-icon">⏱️</span>
+                    <span class="stat-number" id="total-minutes">{{ stats.total_minutes or 0 }}</span>
+                    <span class="stat-label">Minutes Trained</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-icon">🔥</span>
+                    <span class="stat-number" id="current-streak">{{ stats.streak or 0 }}</span>
+                    <span class="stat-label">Day Streak</span>
+                </div>
+            </div>
+            
+            <!-- Main Content Grid -->
+            <div class="profile-grid">
+                <!-- Personal Info Card -->
+                <div class="profile-card personal-info-card">
+                    <h3>📋 Personal Information</h3>
+                    <form id="personal-info-form">
+                        <div class="form-group">
+                            <label for="user-name">Full Name</label>
+                            <input type="text" id="user-name" value="{{ user.name or '' }}" placeholder="Enter your name">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="user-age">Age</label>
+                                <input type="number" id="user-age" value="{{ user.age or '' }}" placeholder="Age" min="10" max="100">
+                            </div>
+                            <div class="form-group">
+                                <label for="user-gender">Gender</label>
+                                <select id="user-gender">
+                                    <option value="">Select</option>
+                                    <option value="male" {{ 'selected' if user.gender == 'male' else '' }}>Male</option>
+                                    <option value="female" {{ 'selected' if user.gender == 'female' else '' }}>Female</option>
+                                    <option value="other" {{ 'selected' if user.gender == 'other' else '' }}>Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="user-height">Height (cm)</label>
+                                <input type="number" id="user-height" value="{{ user.height or '' }}" placeholder="175" min="100" max="250">
+                            </div>
+                            <div class="form-group">
+                                <label for="user-weight">Weight (kg)</label>
+                                <input type="number" id="user-weight" value="{{ user.weight or '' }}" placeholder="70" min="30" max="300">
+                            </div>
+                        </div>
+                        <button type="submit" class="save-btn">💾 Save Changes</button>
+                    </form>
+                </div>
+                
+                <!-- Fitness Goals Card -->
+                <div class="profile-card goals-card">
+                    <h3>🎯 Fitness Goals</h3>
+                    <div class="goals-list">
+                        <div class="goal-item">
+                            <div class="goal-header">
+                                <span class="goal-name">Weekly Workouts</span>
+                                <span class="goal-progress" id="weekly-goal-text">{{ stats.weekly_workouts or 0 }}/5</span>
+                            </div>
+                            <div class="goal-bar">
+                                <div class="goal-fill" id="weekly-goal-fill" style="width: {{ stats.weekly_progress or 0 }}%"></div>
+                            </div>
+                        </div>
+                        <div class="goal-item">
+                            <div class="goal-header">
+                                <span class="goal-name">Daily Reps Goal</span>
+                                <span class="goal-progress" id="reps-goal-text">{{ stats.today_reps or 0 }}/50</span>
+                            </div>
+                            <div class="goal-bar">
+                                <div class="goal-fill" id="reps-goal-fill" style="width: {{ stats.reps_progress or 0 }}%"></div>
+                            </div>
+                        </div>
+                        <div class="goal-item">
+                            <div class="goal-header">
+                                <span class="goal-name">Form Score Average</span>
+                                <span class="goal-progress" id="form-goal-text">{{ stats.avg_form_score or 0 }}/100</span>
+                            </div>
+                            <div class="goal-bar">
+                                <div class="goal-fill goal-fill-score" id="form-goal-fill" style="width: {{ stats.form_progress or 0 }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="set-goals">
+                        <button class="set-goals-btn" id="set-goals-btn">⚙️ Customize Goals</button>
+                    </div>
+                </div>
+                
+                <!-- Achievements Card -->
+                <div class="profile-card achievements-card">
+                    <h3>🏅 Achievements</h3>
+                    <div class="achievements-grid">
+                        <div class="achievement {{ 'unlocked' if stats.total_workouts >= 1 else 'locked' }}">
+                            <span class="achievement-icon">🌟</span>
+                            <span class="achievement-name">First Workout</span>
+                        </div>
+                        <div class="achievement {{ 'unlocked' if stats.total_workouts >= 10 else 'locked' }}">
+                            <span class="achievement-icon">💪</span>
+                            <span class="achievement-name">10 Workouts</span>
+                        </div>
+                        <div class="achievement {{ 'unlocked' if stats.streak >= 7 else 'locked' }}">
+                            <span class="achievement-icon">🔥</span>
+                            <span class="achievement-name">7 Day Streak</span>
+                        </div>
+                        <div class="achievement {{ 'unlocked' if stats.total_reps >= 100 else 'locked' }}">
+                            <span class="achievement-icon">💯</span>
+                            <span class="achievement-name">100 Reps Club</span>
+                        </div>
+                        <div class="achievement {{ 'unlocked' if stats.avg_form_score >= 90 else 'locked' }}">
+                            <span class="achievement-icon">🎯</span>
+                            <span class="achievement-name">Perfect Form</span>
+                        </div>
+                        <div class="achievement {{ 'unlocked' if stats.total_workouts >= 50 else 'locked' }}">
+                            <span class="achievement-icon">🏆</span>
+                            <span class="achievement-name">50 Workouts</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Recent Activity Card -->
+                <div class="profile-card activity-card">
+                    <h3>📊 Recent Activity</h3>
+                    <div class="activity-chart-container">
+                        <canvas id="activityChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Favorite Exercises Card -->
+                <div class="profile-card favorites-card">
+                    <h3>❤️ Favorite Exercises</h3>
+                    <div class="favorites-list" id="favorites-list">
+                        {% if favorites %}
+                            {% for fav in favorites %}
+                            <div class="favorite-item">
+                                <span class="fav-name">{{ fav.name }}</span>
+                                <span class="fav-count">{{ fav.count }} times</span>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="no-favorites">Start working out to see your favorites!</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Settings Card -->
+                <div class="profile-card settings-card">
+                    <h3>⚙️ Settings</h3>
+                    <div class="settings-list">
+                        <div class="setting-item">
+                            <span class="setting-label">🔔 Notifications</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="notifications-toggle" {{ 'checked' if settings.notifications else '' }}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <span class="setting-label">🌙 Dark Mode</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="darkmode-toggle" {{ 'checked' if settings.dark_mode else '' }}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <span class="setting-label">🔊 Sound Effects</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="sound-toggle" {{ 'checked' if settings.sounds else '' }}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <span class="setting-label">📏 Units</span>
+                            <select id="units-select" class="setting-select">
+                                <option value="metric" {{ 'selected' if settings.units == 'metric' else '' }}>Metric (kg/cm)</option>
+                                <option value="imperial" {{ 'selected' if settings.units == 'imperial' else '' }}>Imperial (lb/in)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Edit Profile Modal -->
+        <div class="modal hidden" id="edit-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Edit Profile</h3>
+                    <button class="close-modal" id="close-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="avatar-selector">
+                        <p>Choose Avatar Color</p>
+                        <div class="color-options">
+                            <div class="color-option" data-color="#3498db" style="background: #3498db"></div>
+                            <div class="color-option" data-color="#e74c3c" style="background: #e74c3c"></div>
+                            <div class="color-option" data-color="#2ecc71" style="background: #2ecc71"></div>
+                            <div class="color-option" data-color="#9b59b6" style="background: #9b59b6"></div>
+                            <div class="color-option" data-color="#f39c12" style="background: #f39c12"></div>
+                            <div class="color-option" data-color="#1abc9c" style="background: #1abc9c"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Profile Title</label>
+                        <select id="profile-title-select">
+                            <option value="Amateur Athlete">Amateur Athlete</option>
+                            <option value="Fitness Beginner">Fitness Beginner</option>
+                            <option value="Gym Regular">Gym Regular</option>
+                            <option value="Fitness Enthusiast">Fitness Enthusiast</option>
+                            <option value="Professional Athlete">Professional Athlete</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-cancel" id="cancel-modal">Cancel</button>
+                    <button class="btn-save" id="save-modal">Save</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Goals Modal -->
+        <div class="modal hidden" id="goals-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Customize Goals</h3>
+                    <button class="close-modal" id="close-goals-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Weekly Workout Goal</label>
+                        <input type="number" id="goal-weekly" value="5" min="1" max="7">
+                    </div>
+                    <div class="form-group">
+                        <label>Daily Reps Goal</label>
+                        <input type="number" id="goal-reps" value="50" min="10" max="500">
+                    </div>
+                    <div class="form-group">
+                        <label>Target Form Score</label>
+                        <input type="number" id="goal-form" value="85" min="50" max="100">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-cancel" id="cancel-goals-modal">Cancel</button>
+                    <button class="btn-save" id="save-goals-modal">Save Goals</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/profile.js') }}"></script>
+</body>
+</html>
