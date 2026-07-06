@@ -4,6 +4,7 @@ opencv-python>=4.5.0
 mediapipe>=0.10.0
 numpy>=1.21.0
 pyyaml>=6.0.0
+gunicorn>=21.2.0
 
 # Video processing (H.264 codec support for browser-compatible videos)
 imageio>=2.31.0
