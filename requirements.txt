@@ -8,6 +8,7 @@ pyyaml>=6.0.0
 # Video processing (H.264 codec support for browser-compatible videos)
 imageio>=2.31.0
 imageio-ffmpeg>=0.4.8
-
+gunicorn>=23.0.0
+Flask-Cors>=4.0.0
 # Optional: For better chart rendering in dashboard (included via CDN)
 # matplotlib>=3.5.0
