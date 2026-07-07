@@ -16,6 +16,10 @@ import json
 import time
 import cv2
 import gc
+import subprocess
+import threading
+from collections import deque
+import numpy as np
 
 # Force line-buffered stdout so every log() appears immediately in the parent log
 sys.stdout.reconfigure(line_buffering=True)
@@ -23,14 +27,105 @@ sys.stdout.reconfigure(line_buffering=True)
 def log(msg):
     print(msg, flush=True)
 
-# Try to use imageio with ffmpeg for H.264 support
+# Try to use imageio-ffmpeg (bundled ffmpeg binary) for H.264 output
 try:
-    import imageio
+    import imageio_ffmpeg
     IMAGEIO_AVAILABLE = True
-    log("imageio available for H.264 output")
+    log("imageio-ffmpeg available for H.264 output")
 except ImportError:
     IMAGEIO_AVAILABLE = False
-    log("imageio not available, using OpenCV for output")
+    log("imageio-ffmpeg not available, using OpenCV for output")
+
+
+# --- Direct ffmpeg pipe writer ---------------------------------------------
+# crf 23 + preset ultrafast (vs. the previous quality=8 -> crf 10 via imageio)
+# to fit peak RAM/CPU inside the 1 GB container. Stderr is drained on a
+# background thread so a full pipe can't stall ffmpeg, and its tail is kept
+# for error reporting when the process dies (e.g. OOM-killed).
+
+DOWNSCALE_OUTPUT = False          # toggle: shrink annotated output to save RAM/CPU
+DOWNSCALE_TARGET = (720, 1280)    # (width, height) used when DOWNSCALE_OUTPUT is True
+
+FFMPEG_STDERR_TAIL = 40  # lines of stderr kept for error reporting
+
+
+class FFmpegWriter:
+    """Pipes raw RGB24 frames into ffmpeg to produce an H.264 mp4.
+
+    Exposes the same append_data()/close() interface the old imageio writer
+    used, so call sites elsewhere in process_video don't need to change.
+    """
+
+    def __init__(self, output_path, width, height, fps):
+        self.in_width = width
+        self.in_height = height
+        self.out_width, self.out_height = (
+            DOWNSCALE_TARGET if DOWNSCALE_OUTPUT else (width, height)
+        )
+
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        cmd = [
+            ffmpeg_exe, '-y',
+            '-f', 'rawvideo', '-vcodec', 'rawvideo',
+            '-s', f'{width}x{height}', '-pix_fmt', 'rgb24', '-r', f'{fps:.2f}',
+            '-i', '-',
+        ]
+        if DOWNSCALE_OUTPUT:
+            cmd += ['-vf', f'scale={self.out_width}:{self.out_height}']
+        cmd += [
+            '-an', '-vcodec', 'libx264', '-pix_fmt', 'yuv420p',
+            '-crf', '23', '-preset', 'ultrafast',
+            '-v', 'warning', output_path,
+        ]
+
+        self._proc = subprocess.Popen(
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+
+        self._stderr_lines = deque(maxlen=FFMPEG_STDERR_TAIL)
+        self._stderr_thread = threading.Thread(target=self._drain_stderr, daemon=True)
+        self._stderr_thread.start()
+
+    def _drain_stderr(self):
+        try:
+            for line in iter(self._proc.stderr.readline, b''):
+                self._stderr_lines.append(line.decode(errors='replace').rstrip())
+        except Exception:
+            pass
+
+    def _stderr_tail(self):
+        return '\n'.join(self._stderr_lines) or '(no ffmpeg stderr captured)'
+
+    def append_data(self, frame):
+        """frame must be RGB uint8 of (height, width, 3). Coerces/resizes
+        anything else so one off-size frame can't misalign or break the pipe."""
+        if frame.dtype != np.uint8:
+            frame = frame.astype(np.uint8)
+        if frame.ndim != 3 or frame.shape[2] != 3:
+            raise ValueError(f"expected HxWx3 frame, got shape {frame.shape}")
+        if frame.shape[0] != self.in_height or frame.shape[1] != self.in_width:
+            frame = cv2.resize(frame, (self.in_width, self.in_height))
+
+        try:
+            self._proc.stdin.write(frame.tobytes())
+        except BrokenPipeError as e:
+            raise BrokenPipeError(
+                f"ffmpeg pipe broke (likely killed/OOM). stderr tail:\n{self._stderr_tail()}"
+            ) from e
+
+    def close(self):
+        try:
+            if self._proc.stdin:
+                self._proc.stdin.close()
+        except BrokenPipeError:
+            pass
+        returncode = self._proc.wait()
+        self._stderr_thread.join(timeout=5)
+        if returncode != 0:
+            raise RuntimeError(
+                f"ffmpeg exited with code {returncode}. stderr tail:\n{self._stderr_tail()}"
+            )
 
 
 def draw_skeleton(frame, landmarks, mp_pose, mp_drawing):
@@ -278,19 +373,13 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
                 output_video_path = output_video_path.rsplit('.', 1)[0] + '.mp4'
             
             if IMAGEIO_AVAILABLE:
-                # Use imageio with ffmpeg for H.264
+                # Direct ffmpeg pipe (crf 23 + ultrafast to fit the 1 GB container)
                 try:
-                    imageio_writer = imageio.get_writer(
-                        output_video_path,
-                        fps=fps,
-                        codec='libx264',  # H.264 codec
-                        pixelformat='yuv420p',  # Browser compatible
-                        quality=8,
-                        macro_block_size=1  # Avoid size issues
-                    )
-                    log(f"Using imageio/FFmpeg H.264 writer: {output_video_path}")
+                    imageio_writer = FFmpegWriter(output_video_path, width, height, fps)
+                    log(f"Using direct-ffmpeg H.264 writer: {output_video_path} "
+                        f"(crf=23 preset=ultrafast downscale={'on' if DOWNSCALE_OUTPUT else 'off'})")
                 except Exception as e:
-                    log(f"imageio writer init failed: {e}, will use OpenCV")
+                    log(f"ffmpeg writer init failed: {e}, will use OpenCV")
                     imageio_writer = None
             
             if not imageio_writer:
@@ -621,11 +710,8 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
         
         # Close video writers
         if imageio_writer:
-            try:
-                imageio_writer.close()
-                log(f"H.264 video saved: {output_video_path}")
-            except Exception as e:
-                log(f"Error closing imageio writer: {e}")
+            imageio_writer.close()  # raises RuntimeError w/ ffmpeg stderr on non-zero exit
+            log(f"H.264 video saved: {output_video_path}")
         if out:
             out.release()
         
