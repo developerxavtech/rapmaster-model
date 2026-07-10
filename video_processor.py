@@ -537,11 +537,19 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
 
                     engine_reps = status.get('counter', 0)
 
-                    # Collect primary elbow angle for bench press post-processing
+                    # Collect average elbow angle for bench press (both arms)
                     if exercise_type == 'bench_press':
-                        primary_angle = status.get('angles', {}).get('primary')
-                        if primary_angle is not None:
-                            bp_angle_series.append(primary_angle)
+                        # Left arm:  shoulder=11, elbow=13, wrist=15
+                        # Right arm: shoulder=12, elbow=14, wrist=16
+                        l_vis = min(lm[11].visibility, lm[13].visibility, lm[15].visibility)
+                        r_vis = min(lm[12].visibility, lm[14].visibility, lm[16].visibility)
+                        _angles = []
+                        if l_vis > 0.3:
+                            _angles.append(_angle3(lm[11], lm[13], lm[15]))
+                        if r_vis > 0.3:
+                            _angles.append(_angle3(lm[12], lm[14], lm[16]))
+                        if _angles:
+                            bp_angle_series.append(sum(_angles) / len(_angles))
 
                     current_stats['reps'] = 0 if exercise_type in ('deadlift', 'bench_press') else engine_reps
                     current_stats['form_score'] = status.get('form_score', 100)
@@ -654,80 +662,22 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
             results['reps'] = dl_reps
 
         # ── Bench press post-processing rep count ─────────────────────────────
-        # Count reps from the elbow-angle series collected during the video.
-        # Algorithm mirrors the deadlift approach:
-        #   1. Smooth with a 5-sample moving average
-        #   2. Find actual max (lockout ~165°) and min (bar at chest ~75-95°)
-        #   3. Set threshold = 25% of range above the minimum — real reps (bar
-        #      to chest) spend 7+ frames below it; re-rack motions (~120-130°)
-        #      spend fewer frames, blocked by MIN_DOWN
-        #   4. Count each lockout→press→lockout cycle (arm straight → elbow bends
-        #      to chest → arm straight = 1 rep)
+        # State machine using average of both elbow angles:
+        #   DOWN: avg elbow angle < 90°   (bar at chest)
+        #   UP:   avg elbow angle > 160°  while in DOWN → count rep
         if exercise_type == 'bench_press':
-            if len(bp_angle_series) >= 6:
-                w = 5
-                smoothed_bp = []
-                for i in range(len(bp_angle_series)):
-                    chunk = bp_angle_series[max(0, i - w):i + w + 1]
-                    smoothed_bp.append(sum(chunk) / len(chunk))
-
-                sig_min = min(smoothed_bp)   # deepest point (bar at chest)
-                sig_max = max(smoothed_bp)   # lockout (arms extended)
-                sig_range = sig_max - sig_min
-                log(f"[BP] elbow_angle min={sig_min:.1f} max={sig_max:.1f} range={sig_range:.1f} samples={len(smoothed_bp)}")
-
-                # A real bench press set should produce at least 30° of range.
-                if sig_range >= 30:
-                    # Threshold at 25% of range above minimum.
-                    # Lower than 30% so re-rack motions (~120-130°) spend fewer
-                    # frames below the line; real reps (bar to chest, ~80-110°)
-                    # still accumulate plenty of frames well below it.
-                    threshold = sig_min + sig_range * 0.25
-                    MIN_UP   = 3    # ~0.3 s — min frames at lockout before next rep
-                    MIN_DOWN = 7    # ~0.7 s — min frames at depth for a valid rep
-                    MIN_REP_INTERVAL = 20   # ~2.0 s — min samples between rep counts
-                    in_down = False
-                    down_count = 0
-                    up_count = MIN_UP   # assume starting at lockout
-                    last_rep_idx = -MIN_REP_INTERVAL
-                    dip_min_angle = float('inf')  # tracked for logging only
-                    for idx, val in enumerate(smoothed_bp):
-                        if val <= threshold:            # pressing / at depth
-                            if in_down:
-                                down_count += 1
-                                if val < dip_min_angle:
-                                    dip_min_angle = val
-                            else:
-                                if up_count >= MIN_UP:
-                                    in_down = True
-                                    down_count = 1
-                                    dip_min_angle = val
-                                    up_count = 0
-                        else:                           # at lockout
-                            if in_down:
-                                if down_count >= MIN_DOWN:
-                                    if (idx - last_rep_idx) >= MIN_REP_INTERVAL:
-                                        bp_reps += 1
-                                        last_rep_idx = idx
-                                        log(f"[BP] rep {bp_reps} at sample {idx} (down {down_count} samples, min={dip_min_angle:.1f}°)")
-                                    else:
-                                        log(f"[BP] skipped fast rep at sample {idx} ({idx - last_rep_idx} samples since last)")
-                                else:
-                                    log(f"[BP] ignored brief dip at sample {idx} (only {down_count} samples, min={dip_min_angle:.1f}°, need {MIN_DOWN})")
-                                in_down = False
-                                down_count = 0
-                                dip_min_angle = float('inf')
-                            up_count += 1
-                    # Video may end while the person is still pressing up on the last rep.
-                    # If a dip is in progress at the end of the signal, count it.
-                    if in_down and down_count >= MIN_DOWN:
+            if len(bp_angle_series) >= 2:
+                log(f"[BP] samples={len(bp_angle_series)} min={min(bp_angle_series):.1f}° max={max(bp_angle_series):.1f}°")
+                bp_state = 'up'
+                for val in bp_angle_series:
+                    if val < 90.0:
+                        bp_state = 'down'
+                    elif val > 160.0 and bp_state == 'down':
+                        bp_state = 'up'
                         bp_reps += 1
-                        log(f"[BP] rep {bp_reps} counted from final dip at video end (down {down_count} samples, min={dip_min_angle:.1f}°)")
-                    log(f"[BP] post-processing → {bp_reps} rep(s) at threshold={threshold:.1f}°")
-                else:
-                    log(f"[BP] movement too small ({sig_range:.1f}° < 30°) — 0 reps")
+                log(f"[BP] post-processing → {bp_reps} rep(s) | down<90° up>160°")
             else:
-                log(f"[BP] not enough angle samples ({len(bp_angle_series)}) — 0 reps")
+                log(f"[BP] not enough angle samples ({len(bp_angle_series)})")
 
             results['reps'] = bp_reps
             current_stats['reps'] = bp_reps
