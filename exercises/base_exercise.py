@@ -83,8 +83,21 @@ class BaseExercise:
         self.counter_right = 0
         
         # Zaman filtreleme
-        self.last_count_time = 0
+        self.last_count_time = -float('inf')  # -inf ensures the first rep is never blocked
         self.min_rep_duration = config.get("min_rep_duration", 0.5)  # minimum saniye
+
+        # Minimum depth tracking — prevents unrack/rerack gestures from counting as reps.
+        # Depth is only accumulated AFTER the person transitions from trigger_state (up) to
+        # from_state (pressing), ensuring the unracking motion (pressing→up without prior lockout)
+        # never accumulates depth and thus never counts as a rep.
+        self.min_depth_angle = self.counter_rule.get("min_depth_angle", None)
+        # min_depth_frames: how many analyzed frames must be at/below min_depth_angle
+        # before depth_valid becomes True. Default=1 (legacy behaviour). Set to 2+
+        # to reject single-frame MediaPipe noise spikes without missing real reps.
+        self.min_depth_frames = self.counter_rule.get("min_depth_frames", 1)
+        self._min_angle_since_count = float('inf')
+        self._depth_tracking_active = False  # only True after up→pressing transition
+        self._frames_at_depth = 0  # cumulative frames at/below min_depth_angle this rep
         
         # Kalibrasyon
         self.calibration_enabled = config.get("calibration", {}).get("enabled", False)
@@ -234,32 +247,64 @@ class BaseExercise:
         
         return self.current_state
     
-    def update_counter(self) -> bool:
+    def update_counter(self, video_time: float = None) -> bool:
         """
         Sayacı güncelle.
-        
+
+        Args:
+            video_time: Current video timestamp in seconds (frame_count / fps).
+                        When provided the min_rep_duration guard uses video time
+                        rather than wall-clock time, so pre-recorded videos
+                        processed faster than real-time are handled correctly.
+
         Returns:
             Sayaç artırıldıysa True
         """
         trigger_state = self.counter_rule.get("trigger_state")
         from_state = self.counter_rule.get("from_state")  # Opsiyonel: hangi state'den gelmiş olmalı
-        
+
         # State değişimi kontrolü
         state_changed = self.prev_state != self.current_state
         reached_trigger = self.current_state == trigger_state
-        
+
         # from_state belirtilmişse kontrol et
         from_valid = True
         if from_state:
             from_valid = self.prev_state == from_state
-        
-        # Zaman filtresi
-        current_time = time.time()
+
+        # Zaman filtresi — use video time when available so the guard works correctly
+        # for pre-recorded videos processed faster than real-time.
+        current_time = video_time if video_time is not None else time.time()
         time_valid = (current_time - self.last_count_time) >= self.min_rep_duration
-        
-        if state_changed and reached_trigger and from_valid and time_valid:
+
+        # Activate depth tracking only on the up→pressing transition (lockout→descent).
+        # This ensures unracking (pressing→up without prior lockout) never accumulates
+        # depth and cannot be mistaken for a rep.
+        if (self.min_depth_angle is not None and
+                self.prev_state == trigger_state and
+                self.current_state == from_state):
+            self._min_angle_since_count = float('inf')
+            self._frames_at_depth = 0
+            self._depth_tracking_active = True
+
+        # Accumulate minimum angle and depth-frame count only while tracking is active.
+        if self._depth_tracking_active and "primary" in self._computed_angles:
+            primary_angle = self._computed_angles["primary"]
+            if primary_angle < self._min_angle_since_count:
+                self._min_angle_since_count = primary_angle
+            if self.min_depth_angle is not None and primary_angle <= self.min_depth_angle:
+                self._frames_at_depth += 1
+
+        depth_valid = True
+        if self.min_depth_angle is not None:
+            depth_valid = self._frames_at_depth >= self.min_depth_frames
+
+        if state_changed and reached_trigger and from_valid and time_valid and depth_valid:
             self.counter += 1
             self.last_count_time = current_time
+            self._min_angle_since_count = float('inf')  # reset for next rep
+            self._frames_at_depth = 0
+            self._depth_tracking_active = False  # wait for next up→pressing transition
             
             # Kalibrasyon verisi topla
             if self.calibration_enabled and not self.is_calibrated:
@@ -438,9 +483,12 @@ class BaseExercise:
         self.counter = 0
         self.counter_left = 0
         self.counter_right = 0
-        self.last_count_time = 0
+        self.last_count_time = -float('inf')
         self.angle_history = []
         self._computed_angles = {}
+        self._min_angle_since_count = float('inf')
+        self._depth_tracking_active = False
+        self._frames_at_depth = 0
         # Form score reset
         self.rep_start_time = None
         self.rep_durations = []
@@ -560,9 +608,9 @@ class BilateralExercise(BaseExercise):
         self.prev_state_left = None
         self.prev_state_right = None
         
-        self.last_count_time_left = 0
-        self.last_count_time_right = 0
-    
+        self.last_count_time_left = -float('inf')
+        self.last_count_time_right = -float('inf')
+
     def compute_bilateral_angles(self, landmarks, frame_shape: Tuple[int, int]) -> Dict[str, float]:
         """Sol ve sağ taraf açılarını hesapla."""
         angles = {}
@@ -615,10 +663,10 @@ class BilateralExercise(BaseExercise):
         
         return self.current_state_left, self.current_state_right
     
-    def update_bilateral_counter(self) -> Tuple[bool, bool]:
+    def update_bilateral_counter(self, video_time: float = None) -> Tuple[bool, bool]:
         """Her iki taraf için sayacı güncelle."""
         trigger_state = self.counter_rule.get("trigger_state")
-        current_time = time.time()
+        current_time = video_time if video_time is not None else time.time()
         
         left_counted = False
         right_counted = False
@@ -651,9 +699,9 @@ class BilateralExercise(BaseExercise):
         self.current_state_right = None
         self.prev_state_left = None
         self.prev_state_right = None
-        self.last_count_time_left = 0
-        self.last_count_time_right = 0
-    
+        self.last_count_time_left = -float('inf')
+        self.last_count_time_right = -float('inf')
+
     def get_status(self) -> Dict[str, Any]:
         """Bilateral durum bilgisi."""
         status = super().get_status()

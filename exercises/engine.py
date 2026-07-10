@@ -55,22 +55,25 @@ class ExerciseEngine:
         if self.exercise:
             self.exercise.reset()
     
-    def process_frame(self, frame: np.ndarray, landmarks) -> Dict[str, Any]:
+    def process_frame(self, frame: np.ndarray, landmarks, video_time: float = None) -> Dict[str, Any]:
         """
         Frame'i işle ve egzersiz verilerini güncelle.
-        
+
         Args:
             frame: OpenCV frame (BGR)
             landmarks: MediaPipe pose landmarks
-            
+            video_time: Current video timestamp in seconds (frame_count / fps).
+                        Pass this when processing pre-recorded video so the
+                        min_rep_duration guard uses video time, not wall-clock time.
+
         Returns:
             İşlem sonuçları dict'i
         """
         if not self.exercise or not landmarks:
             return {"success": False, "error": "No exercise or landmarks"}
-        
+
         frame_shape = frame.shape[:2]  # (height, width)
-        
+
         result = {
             "success": True,
             "exercise_name": self.exercise_name,
@@ -80,19 +83,19 @@ class ExerciseEngine:
             "feedback": [],
             "counted": False
         }
-        
+
         try:
             # Bilateral (çift taraflı) egzersiz mi?
             if isinstance(self.exercise, BilateralExercise):
-                result = self._process_bilateral(frame, landmarks, frame_shape, result)
-            
+                result = self._process_bilateral(frame, landmarks, frame_shape, result, video_time)
+
             # Duration (süre bazlı) egzersiz mi?
             elif isinstance(self.exercise, DurationExercise):
                 result = self._process_duration(frame, landmarks, frame_shape, result)
             
             # Normal egzersiz
             else:
-                result = self._process_standard(frame, landmarks, frame_shape, result)
+                result = self._process_standard(frame, landmarks, frame_shape, result, video_time)
             
             # Görselleştirme
             self._draw_visualization(frame, landmarks, frame_shape)
@@ -105,24 +108,24 @@ class ExerciseEngine:
         
         return result
     
-    def _process_standard(self, frame, landmarks, frame_shape, result):
+    def _process_standard(self, frame, landmarks, frame_shape, result, video_time=None):
         """Standart tekrar bazlı egzersiz işleme."""
         # Tüm açıları hesapla
         self.exercise.compute_all_angles(landmarks, frame_shape)
-        
+
         # Context oluştur
         context = self.exercise.get_context(landmarks, frame_shape)
-        
+
         # State güncelle
         prev_state = self.exercise.current_state
         self.exercise.update_state(context)
-        
+
         # Rep tracking başlat (descent başladığında)
         if prev_state == "start" and self.exercise.current_state == "descent":
             self.exercise.start_rep_tracking()
-        
+
         # Sayacı güncelle
-        counted = self.exercise.update_counter()
+        counted = self.exercise.update_counter(video_time)
         
         # Feedback kontrol
         feedback = self.exercise.check_feedback(context)
@@ -148,23 +151,23 @@ class ExerciseEngine:
         
         return result
     
-    def _process_bilateral(self, frame, landmarks, frame_shape, result):
+    def _process_bilateral(self, frame, landmarks, frame_shape, result, video_time=None):
         """Bilateral egzersiz işleme."""
         exercise: BilateralExercise = self.exercise
-        
+
         # Her iki taraf için açıları hesapla
         exercise.compute_bilateral_angles(landmarks, frame_shape)
-        
+
         # Context oluştur
         context = exercise.get_context(landmarks, frame_shape)
         context["left_angle"] = exercise._computed_angles.get("left_angle", 0)
         context["right_angle"] = exercise._computed_angles.get("right_angle", 0)
-        
+
         # Her iki taraf için state güncelle
         exercise.update_bilateral_state(context)
-        
+
         # Sayaçları güncelle
-        left_counted, right_counted = exercise.update_bilateral_counter()
+        left_counted, right_counted = exercise.update_bilateral_counter(video_time)
         
         # Feedback kontrol
         context["counter_left"] = exercise.counter_left
