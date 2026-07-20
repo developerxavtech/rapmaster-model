@@ -43,8 +43,8 @@ except ImportError:
 # background thread so a full pipe can't stall ffmpeg, and its tail is kept
 # for error reporting when the process dies (e.g. OOM-killed).
 
-DOWNSCALE_OUTPUT = False          # toggle: shrink annotated output to save RAM/CPU
-DOWNSCALE_TARGET = (720, 1280)    # (width, height) used when DOWNSCALE_OUTPUT is True
+DOWNSCALE_OUTPUT = True           # toggle: shrink annotated output to save RAM/CPU
+DOWNSCALE_TARGET = (640, 480)     # (width, height) used when DOWNSCALE_OUTPUT is True
 
 FFMPEG_STDERR_TAIL = 40  # lines of stderr kept for error reporting
 
@@ -449,7 +449,7 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
         body_orientation_tracked = []  # 'standing' or 'lying'
 
         frame_count = 0
-        analyze_skip = max(1, int(fps / 8))  # Analyze at ~8 fps
+        analyze_skip = max(1, int(fps / 5))  # Analyze at ~5 fps to save memory on server
         log(f"Analyze skip: {analyze_skip} (analyzing at ~{fps/analyze_skip:.1f} fps)")
 
         # Deadlift: collect shoulder Y series for post-processing rep count.
@@ -516,11 +516,12 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
                         hp_x = (lm[23].x + lm[24].x) / 2
                         dy = abs(hp_y - sh_y)
                         dx = abs(hp_x - sh_x)
-                        # Standing: large vertical separation (dy > dx)
-                        # Lying: large horizontal separation (dx > dy) or dy very small
-                        if dy > 0.12 and dy > dx * 0.8:
+                        # Standing: large vertical separation (dy clearly dominates dx)
+                        if dy > 0.10 and dy > dx * 0.7:
                             body_orientation_tracked.append('standing')
-                        elif dx > dy or dy < 0.08:
+                        # Lying: shoulders and hips clearly horizontal (dx much larger than dy)
+                        # Note: dy < 0.08 alone is NOT enough — squat bottom also has small dy
+                        elif dx > dy * 1.5 and dy < 0.08:
                             body_orientation_tracked.append('lying')
 
                     # ── Collect shoulder Y for deadlift post-processing ───────
@@ -663,21 +664,31 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
 
         # ── Bench press post-processing rep count ─────────────────────────────
         # State machine using average of both elbow angles:
-        #   DOWN: avg elbow angle < 90°   (bar at chest)
-        #   UP:   avg elbow angle > 160°  while in DOWN → count rep
+        #   DOWN: avg elbow angle < 105°  (bar near chest)
+        #   UP:   avg elbow angle > 140°  while in DOWN → count rep
+        # Thresholds are intentionally lenient because 2D camera projection
+        # compresses angles — perfect form often only reaches 95-100° at bottom.
         if exercise_type == 'bench_press':
             if len(bp_angle_series) >= 2:
-                log(f"[BP] samples={len(bp_angle_series)} min={min(bp_angle_series):.1f}° max={max(bp_angle_series):.1f}°")
+                bp_min = min(bp_angle_series)
+                bp_max = max(bp_angle_series)
+                log(f"[BP] samples={len(bp_angle_series)} min={bp_min:.1f}° max={bp_max:.1f}°")
                 bp_state = 'up'
                 for val in bp_angle_series:
-                    if val < 90.0:
+                    if val < 105.0:
                         bp_state = 'down'
-                    elif val > 160.0 and bp_state == 'down':
+                    elif val > 140.0 and bp_state == 'down':
                         bp_state = 'up'
                         bp_reps += 1
-                log(f"[BP] post-processing → {bp_reps} rep(s) | down<90° up>160°")
+                log(f"[BP] post-processing → {bp_reps} rep(s) | down<105° up>140°")
+                # Fall back to engine counter if post-processing missed reps
+                # (camera angle can compress elbow angles beyond our thresholds)
+                if bp_reps == 0 and engine_reps > 0:
+                    log(f"[BP] post-processing got 0 reps, falling back to engine count: {engine_reps}")
+                    bp_reps = engine_reps
             else:
-                log(f"[BP] not enough angle samples ({len(bp_angle_series)})")
+                log(f"[BP] not enough angle samples ({len(bp_angle_series)}), using engine count")
+                bp_reps = engine_reps
 
             results['reps'] = bp_reps
             current_stats['reps'] = bp_reps
@@ -717,7 +728,7 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
             lying_ratio = body_orientation_tracked.count('lying') / n_orient
             log(f"[WrongExercise] orientation — lying_ratio={lying_ratio:.2f} samples={n_orient}")
 
-            if exercise_type in STANDING_EXERCISES and lying_ratio > 0.5:
+            if exercise_type in STANDING_EXERCISES and lying_ratio > 0.75:
                 results['wrong_exercise'] = True
                 results['wrong_exercise_message'] = (
                     f"Wrong exercise: you appear to be lying down but selected '{exercise_type}' "
@@ -726,7 +737,7 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
                 results['reps'] = 0
                 log(f"[WrongExercise] DETECTED (lying down for standing exercise)")
 
-            elif exercise_type in LYING_EXERCISES and lying_ratio < 0.3:
+            elif exercise_type in LYING_EXERCISES and lying_ratio < 0.3 and results['reps'] == 0:
                 results['wrong_exercise'] = True
                 results['wrong_exercise_message'] = (
                     f"Wrong exercise: you appear to be standing but selected '{exercise_type}' "

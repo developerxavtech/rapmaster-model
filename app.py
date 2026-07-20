@@ -5,7 +5,7 @@ os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 import threading
 import time
@@ -45,6 +45,26 @@ MAX_VIDEO_SIZE_MB = 200
 MAX_VIDEO_DURATION_SEC = 120
 
 
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+@app.route('/dashboard')
+def dashboard():
+    return render_template('dashboard.html')
+
+
+@app.route('/profile')
+def profile():
+    return render_template('profile.html')
+
+
+@app.route('/video-analysis')
+def video_analysis():
+    return render_template('video_analysis.html')
+
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'exercises': len(get_available_exercises())})
@@ -52,36 +72,42 @@ def health():
 
 @app.route('/api/video/upload', methods=['POST'])
 def upload_video():
-    if 'video' not in request.files:
-        return jsonify({'success': False, 'error': 'No video file provided'})
-
-    video_file = request.files['video']
-    exercise_type = request.form.get('exercise_type')
+    # Support both multipart form upload and raw binary upload (React Native sends raw binary)
+    exercise_type = request.args.get('exercise_type') or request.form.get('exercise_type')
+    original_filename = request.args.get('filename', 'workout.mp4')
 
     if not exercise_type:
         return jsonify({'success': False, 'error': 'No exercise type specified'})
-
-    if video_file.filename == '':
-        return jsonify({'success': False, 'error': 'No file selected'})
-
-    video_file.seek(0, 2)
-    file_size = video_file.tell()
-    video_file.seek(0)
-
-    if file_size > MAX_VIDEO_SIZE_MB * 1024 * 1024:
-        return jsonify({
-            'success': False,
-            'error': f'Video too large. Max {MAX_VIDEO_SIZE_MB}MB, got {file_size / (1024*1024):.1f}MB'
-        })
 
     available = get_available_exercises()
     if exercise_type not in available:
         return jsonify({'success': False, 'error': f'Invalid exercise type. Available: {available}'})
 
     video_id = str(uuid.uuid4())
-    filename = f"{video_id}_{video_file.filename}"
+    filename = f"{video_id}_{original_filename}"
     filepath = os.path.join(UPLOAD_FOLDER, filename)
-    video_file.save(filepath)
+
+    if 'video' in request.files:
+        # Multipart upload
+        video_file = request.files['video']
+        if video_file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'})
+        video_file.seek(0, 2)
+        file_size = video_file.tell()
+        video_file.seek(0)
+        if file_size > MAX_VIDEO_SIZE_MB * 1024 * 1024:
+            return jsonify({'success': False, 'error': f'Video too large. Max {MAX_VIDEO_SIZE_MB}MB, got {file_size / (1024*1024):.1f}MB'})
+        video_file.save(filepath)
+    else:
+        # Raw binary upload (Content-Type: video/mp4 or similar)
+        raw = request.get_data()
+        if not raw:
+            return jsonify({'success': False, 'error': 'No video data received'})
+        file_size = len(raw)
+        if file_size > MAX_VIDEO_SIZE_MB * 1024 * 1024:
+            return jsonify({'success': False, 'error': f'Video too large. Max {MAX_VIDEO_SIZE_MB}MB, got {file_size / (1024*1024):.1f}MB'})
+        with open(filepath, 'wb') as f:
+            f.write(raw)
 
     try:
         import cv2
