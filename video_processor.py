@@ -701,65 +701,72 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
         results['state'] = 'COMPLETED'
         results['feedback'] = current_stats['feedback']
 
-        # ── Wrong-exercise detection ──────────────────────────────────────────
-        # Only check squat: if someone selected squat but never bent knees below 105°
-        # (avg stays above 145°), they likely did a deadlift instead.
-        #
-        # Deadlift wrong-exercise is intentionally NOT checked here: from a front-view
-        # camera, the 2D projection of the hip-hinge creates phantom knee angles that
-        # make a real deadlift appear to have deep knee bends. The knee angle signal
-        # is unreliable for deadlift and causes too many false positives.
+        # ── Exercise movement pattern validation ──────────────────────────────
+        # Validates that the recorded movement actually matches the selected exercise.
+        # Catches random videos, wrong exercise selection, and no movement at all.
         results['wrong_exercise'] = False
         results['wrong_exercise_message'] = ''
 
-        # Standing exercises that require an upright body
-        STANDING_EXERCISES = {
-            'squat', 'deadlift', 'lunge', 'side_lunge', 'calf_raise',
-            'high_knees', 'jumping_jack', 'mountain_climber', 'wall_sit',
-            'shoulder_press', 'lateral_raise', 'bicep_curl', 'hammer_curl',
-            'tricep_dip', 'leg_raise'
-        }
-        # Exercises done lying/horizontal
         LYING_EXERCISES = {'bench_press', 'push_up', 'plank', 'glute_bridge'}
 
-        # ── Body orientation check ────────────────────────────────────────────
+        lying_ratio = 0.0
         if body_orientation_tracked:
-            n_orient = len(body_orientation_tracked)
-            lying_ratio = body_orientation_tracked.count('lying') / n_orient
-            log(f"[WrongExercise] orientation — lying_ratio={lying_ratio:.2f} samples={n_orient}")
+            lying_ratio = body_orientation_tracked.count('lying') / len(body_orientation_tracked)
+            log(f"[Validate] lying_ratio={lying_ratio:.2f} samples={len(body_orientation_tracked)}")
 
-            if exercise_type in STANDING_EXERCISES and lying_ratio > 0.75:
-                results['wrong_exercise'] = True
-                results['wrong_exercise_message'] = (
-                    f"Wrong exercise: you appear to be lying down but selected '{exercise_type}' "
-                    f"which requires a standing position. Did you mean bench_press or push_up?"
-                )
-                results['reps'] = 0
-                log(f"[WrongExercise] DETECTED (lying down for standing exercise)")
+        def _fail(msg):
+            results['wrong_exercise'] = True
+            results['wrong_exercise_message'] = msg
+            results['reps'] = 0
+            log(f"[Validate] FAILED — {msg}")
 
-            elif exercise_type in LYING_EXERCISES and lying_ratio < 0.3 and results['reps'] == 0:
-                results['wrong_exercise'] = True
-                results['wrong_exercise_message'] = (
-                    f"Wrong exercise: you appear to be standing but selected '{exercise_type}' "
-                    f"which requires a lying/horizontal position."
-                )
-                results['reps'] = 0
-                log(f"[WrongExercise] DETECTED (standing for lying exercise)")
+        # ── Squat: must show actual knee bend (ROM ≥ 35° and min angle < 135°) ──
+        if exercise_type == 'squat':
+            if lying_ratio > 0.75:
+                _fail("You appear to be lying down. Stand upright to perform a squat.")
+            elif knee_angles_tracked:
+                min_knee = min(knee_angles_tracked)
+                knee_rom = max(knee_angles_tracked) - min_knee
+                log(f"[Validate] squat — min_knee={min_knee:.1f}° ROM={knee_rom:.1f}°")
+                if min_knee > 135 or knee_rom < 35:
+                    _fail(
+                        f"No squat movement detected (knee ROM {knee_rom:.0f}°, min {min_knee:.0f}°). "
+                        f"Bend your knees deeply — go below parallel."
+                    )
+            else:
+                _fail("Could not detect your legs. Make sure your full body is visible in the frame.")
 
-        # ── Knee angle check for squat (secondary check) ─────────────────────
-        if not results['wrong_exercise'] and exercise_type == 'squat' and knee_angles_tracked:
-            n = len(knee_angles_tracked)
-            avg_knee = sum(knee_angles_tracked) / n
-            min_knee = min(knee_angles_tracked)
-            log(f"[WrongExercise] squat knee check — avg={avg_knee:.1f}° min={min_knee:.1f}° samples={n}")
-            if avg_knee > 145 and min_knee > 120:
-                results['wrong_exercise'] = True
-                results['wrong_exercise_message'] = (
-                    f"Wrong exercise: knees never bent deeply enough for a squat "
-                    f"(avg {avg_knee:.0f}°, min {min_knee:.0f}°) — did you mean deadlift?"
-                )
-                results['reps'] = 0
-                log(f"[WrongExercise] DETECTED — {results['wrong_exercise_message']}")
+        # ── Bench press: must be lying down AND show elbow movement ──────────
+        elif exercise_type == 'bench_press':
+            if lying_ratio < 0.25:
+                _fail("You appear to be standing. Lie on the bench to perform bench press.")
+            elif bp_angle_series:
+                elbow_rom = max(bp_angle_series) - min(bp_angle_series)
+                log(f"[Validate] bench — elbow_ROM={elbow_rom:.1f}°")
+                if elbow_rom < 25 and results['reps'] == 0:
+                    _fail(
+                        f"No bench press movement detected (elbow ROM {elbow_rom:.0f}°). "
+                        f"Lower the bar to your chest and press back up."
+                    )
+            else:
+                if results['reps'] == 0:
+                    _fail("Could not detect arm movement. Make sure your arms are visible in the frame.")
+
+        # ── Deadlift: must show significant shoulder vertical movement ────────
+        elif exercise_type == 'deadlift':
+            if lying_ratio > 0.75:
+                _fail("You appear to be lying down. Stand upright to perform a deadlift.")
+            elif dl_shoulder_series:
+                dl_range = max(dl_shoulder_series) - min(dl_shoulder_series)
+                log(f"[Validate] deadlift — shoulder_range={dl_range:.3f}")
+                if dl_range < 0.06 and results['reps'] == 0:
+                    _fail(
+                        f"No deadlift movement detected (shoulder range {dl_range:.3f}). "
+                        f"Hinge at the hips and lift the bar from the floor."
+                    )
+            else:
+                if results['reps'] == 0:
+                    _fail("Could not detect your movement. Make sure your full body is visible.")
         
         # Close video writers
         if imageio_writer:
