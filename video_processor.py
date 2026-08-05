@@ -842,7 +842,7 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
                 chest_bad_reps = [i for i, a in enumerate(bp_rep_min_angles) if a > 100]
                 chest_bad_count = len(chest_bad_reps)
                 log(f"[BP-Form] per-rep mins={[f'{a:.0f}' for a in bp_rep_min_angles]} chest_bad={chest_bad_reps}")
-                if chest_bad_count:
+                if chest_bad_count == len(bp_rep_min_angles):
                     bp_form_issues.append("Not touching chest — lower bar all the way down")
 
             if bp_form_issues:
@@ -865,7 +865,10 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
             # sh_y filter: exclude frames where shoulder_y < 0.40 — these are
             # "sitting up" teardown frames that would corrupt the lockout baseline.
             if not bp_form_issues and bp_hip_frames:
-                valid = [(a, hy, ky) for a, hy, ky, sy in bp_hip_frames if sy > 0.40]
+                # sy > 0.40: exclude sitting-up teardown frames (shoulder near top of frame)
+                # ky - hy > 0.040: exclude non-bench-press body positions where knee
+                # appears at or above hip level (gaps < 0.040 never occur during actual reps)
+                valid = [(a, hy, ky) for a, hy, ky, sy in bp_hip_frames if sy > 0.40 and ky - hy > 0.040]
                 lockout_pairs = [(a, hy, ky) for a, hy, ky in valid if a > 145]
                 press_pairs   = [(a, hy, ky) for a, hy, ky in valid if 80 <= a <= 135]
 
