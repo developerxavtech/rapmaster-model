@@ -426,7 +426,7 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
             min_tracking_confidence=0.5
         )
         log("MediaPipe Pose initialized")
-        
+         
         # Initialize exercise engine
         engine = ExerciseEngine()
         if not engine.set_exercise(exercise_type):
