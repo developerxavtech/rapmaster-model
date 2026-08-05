@@ -865,10 +865,7 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
             # sh_y filter: exclude frames where shoulder_y < 0.40 — these are
             # "sitting up" teardown frames that would corrupt the lockout baseline.
             if not bp_form_issues and bp_hip_frames:
-                # sy > 0.40: exclude sitting-up teardown frames (shoulder near top of frame)
-                # ky - hy > 0.040: exclude non-bench-press body positions where knee
-                # appears at or above hip level (gaps < 0.040 never occur during actual reps)
-                valid = [(a, hy, ky) for a, hy, ky, sy in bp_hip_frames if sy > 0.40 and ky - hy > 0.040]
+                valid = [(a, hy, ky) for a, hy, ky, sy in bp_hip_frames if sy > 0.40]
                 lockout_pairs = [(a, hy, ky) for a, hy, ky in valid if a > 145]
                 press_pairs   = [(a, hy, ky) for a, hy, ky in valid if 80 <= a <= 135]
 
