@@ -462,6 +462,10 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
         # Same motivation as deadlift — fixed thresholds miss reps or count re-racks.
         bp_angle_series = []
         bp_reps = 0
+        # (elbow_angle, hip_y, knee_y, sh_y) tuples collected each frame where arm
+        # angle, hip AND knee landmarks are all visible.  sh_y is used at post-
+        # processing time to filter out "sitting up" frames that contaminate stats.
+        bp_hip_frames = []   # list of (angle, hip_y, knee_y, sh_y)
 
         # Current stats for overlay
         current_stats = {
@@ -550,7 +554,44 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
                         if r_vis > 0.3:
                             _angles.append(_angle3(lm[12], lm[14], lm[16]))
                         if _angles:
-                            bp_angle_series.append(sum(_angles) / len(_angles))
+                            _avg_angle = sum(_angles) / len(_angles)
+                            bp_angle_series.append(_avg_angle)
+                            # Collect (angle, hip_y, knee_y, sh_y) for butt-lift detection.
+                            # Require knee visibility so the gap signal is usable.
+                            if hp_vis > 0.05:
+                                _kn_vis_bp = (lm[25].visibility + lm[26].visibility) / 2
+                                if _kn_vis_bp > 0.3:
+                                    bp_hip_frames.append((
+                                        _avg_angle,
+                                        (lm[23].y + lm[24].y) / 2,
+                                        (lm[25].y + lm[26].y) / 2,
+                                        (lm[11].y + lm[12].y) / 2,
+                                    ))
+
+                        # ── Per-frame landmark console dump (bench press) ─────────
+                        # Printed every analyzed frame so you can watch landmark
+                        # positions in real time and calibrate detection thresholds.
+                        _L  = lm  # shorthand
+                        _kn_vis = (_L[25].visibility + _L[26].visibility) / 2
+                        _ak_vis = (_L[27].visibility + _L[28].visibility) / 2
+                        _elbow_angle_str = f"{_avg_angle:.1f}" if _angles else "N/A"
+                        _hip_y_str  = f"{(_L[23].y+_L[24].y)/2:.3f}" if hp_vis > 0.05 else "hidden"
+                        _knee_y_str = f"{(_L[25].y+_L[26].y)/2:.3f}" if _kn_vis > 0.05 else "hidden"
+                        _ank_y_str  = f"{(_L[27].y+_L[28].y)/2:.3f}" if _ak_vis > 0.05 else "hidden"
+                        print(
+                            f"[LM f={frame_count:04d}] "
+                            f"L_sh=({_L[11].x:.2f},{_L[11].y:.2f}) vis={_L[11].visibility:.2f} | "
+                            f"R_sh=({_L[12].x:.2f},{_L[12].y:.2f}) vis={_L[12].visibility:.2f} | "
+                            f"L_el=({_L[13].x:.2f},{_L[13].y:.2f}) vis={_L[13].visibility:.2f} | "
+                            f"R_el=({_L[14].x:.2f},{_L[14].y:.2f}) vis={_L[14].visibility:.2f} | "
+                            f"L_wr=({_L[15].x:.2f},{_L[15].y:.2f}) vis={_L[15].visibility:.2f} | "
+                            f"R_wr=({_L[16].x:.2f},{_L[16].y:.2f}) vis={_L[16].visibility:.2f} | "
+                            f"hip_y={_hip_y_str} (vis={hp_vis:.2f}) | "
+                            f"knee_y={_knee_y_str} (vis={_kn_vis:.2f}) | "
+                            f"ank_y={_ank_y_str} (vis={_ak_vis:.2f}) | "
+                            f"elbow_angle={_elbow_angle_str}",
+                            flush=True
+                        )
 
                     current_stats['reps'] = 0 if exercise_type in ('deadlift', 'bench_press') else engine_reps
                     current_stats['form_score'] = status.get('form_score', 100)
@@ -664,23 +705,45 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
 
         # ── Bench press post-processing rep count ─────────────────────────────
         # State machine using average of both elbow angles:
-        #   DOWN: avg elbow angle < 105°  (bar near chest)
-        #   UP:   avg elbow angle > 140°  while in DOWN → count rep
-        # Thresholds are intentionally lenient because 2D camera projection
-        # compresses angles — perfect form often only reaches 95-100° at bottom.
+        #   DOWN  : avg elbow angle < 105°  (bar descending toward chest)
+        #   VALID : minimum angle during down phase must reach ≤ 100°
+        #           (bar close enough to chest — matches YAML min_depth_angle)
+        #   UP    : avg elbow angle > 140° while in DOWN → count rep ONLY if valid
+        #
+        # Separating the "entered down state" threshold (105°) from the "valid depth"
+        # threshold (100°) means the state machine can still track the rep arc even
+        # on imperfect camera angles, while only awarding a rep count when the
+        # dumbbells genuinely approached the chest.
+        # The form-check section below records every down phase (including shallow ones)
+        # so form feedback is still generated for partial reps.
+        BP_CHEST_DEPTH_ANGLE = 100  # elbow must reach this or lower to count the rep
         if exercise_type == 'bench_press':
+            bp_rep_min_angles = []    # minimum elbow angle per rep (includes partial reps)
+            bp_rep_slices = []        # (start_idx, end_idx) into bp_angle_series per rep
             if len(bp_angle_series) >= 2:
                 bp_min = min(bp_angle_series)
                 bp_max = max(bp_angle_series)
                 log(f"[BP] samples={len(bp_angle_series)} min={bp_min:.1f}° max={bp_max:.1f}°")
                 bp_state = 'up'
-                for val in bp_angle_series:
+                bp_current_min = 180.0
+                bp_rep_start = 0
+                for i, val in enumerate(bp_angle_series):
                     if val < 105.0:
                         bp_state = 'down'
+                        if val < bp_current_min:
+                            bp_current_min = val
                     elif val > 140.0 and bp_state == 'down':
+                        bp_rep_min_angles.append(bp_current_min)
+                        bp_rep_slices.append((bp_rep_start, i))
+                        bp_rep_start = i          # next rep reuses this lockout frame as its baseline
                         bp_state = 'up'
-                        bp_reps += 1
-                log(f"[BP] post-processing → {bp_reps} rep(s) | down<105° up>140°")
+                        # Only award a rep if the bar reached close enough to the chest.
+                        if bp_current_min <= BP_CHEST_DEPTH_ANGLE:
+                            bp_reps += 1
+                        else:
+                            log(f"[BP] partial rep NOT counted — min angle {bp_current_min:.0f}° > {BP_CHEST_DEPTH_ANGLE}°")
+                        bp_current_min = 180.0
+                log(f"[BP] post-processing → {bp_reps} valid rep(s) | per-rep mins={[f'{a:.0f}' for a in bp_rep_min_angles]}")
                 # Fall back to engine counter if post-processing missed reps
                 # (camera angle can compress elbow angles beyond our thresholds)
                 if bp_reps == 0 and engine_reps > 0:
@@ -768,6 +831,63 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
                 if results['reps'] == 0:
                     _fail("Could not detect your movement. Make sure your full body is visible.")
         
+        # ── Bench press form quality checks ──────────────────────────────────
+        # Runs after reps + validation so it only fires on confirmed bench press sets.
+        if exercise_type == 'bench_press' and not results.get('wrong_exercise'):
+            bp_form_issues = []
+            chest_bad_count = 0
+
+            # ── Check: Bar not touching chest (per-rep elbow depth) ──────────
+            if bp_rep_min_angles:
+                chest_bad_reps = [i for i, a in enumerate(bp_rep_min_angles) if a > 100]
+                chest_bad_count = len(chest_bad_reps)
+                log(f"[BP-Form] per-rep mins={[f'{a:.0f}' for a in bp_rep_min_angles]} chest_bad={chest_bad_reps}")
+                if chest_bad_count:
+                    bp_form_issues.append("Not touching chest — lower bar all the way down")
+
+            if bp_form_issues:
+                results['feedback'] = bp_form_issues[0]
+                results['form_score'] = 0
+                results['avg_form_score'] = 0
+                results['grade'] = 'F'
+                log(f"[BP-Form] chest_bad={chest_bad_count} → score forced to 0 (NO LIFT)")
+
+            # ── Butt lift detection ───────────────────────────────────────────
+            # Runs only when no chest-touch issue was flagged (chest takes priority).
+            #
+            # Signal: knee_y - hip_y gap at lockout vs. during press.
+            # In a correct rep the knee naturally drops relative to the hip during
+            # the press phase (gap INCREASES ≈ +0.011 from observed data).
+            # When the lifter bridges/butt-lifts, the hip rises with the knee so
+            # the gap stays flat or DECREASES (≈ -0.005 from observed data).
+            # Threshold of -0.003 sits cleanly between the two cases.
+            #
+            # sh_y filter: exclude frames where shoulder_y < 0.40 — these are
+            # "sitting up" teardown frames that would corrupt the lockout baseline.
+            if not bp_form_issues and bp_hip_frames:
+                valid = [(a, hy, ky) for a, hy, ky, sy in bp_hip_frames if sy > 0.40]
+                lockout_pairs = [(a, hy, ky) for a, hy, ky in valid if a > 145]
+                press_pairs   = [(a, hy, ky) for a, hy, ky in valid if 80 <= a <= 135]
+
+                log(f"[BP-Butt] valid={len(valid)} lockout={len(lockout_pairs)} press={len(press_pairs)}")
+
+                butt_lift = False
+
+                if len(lockout_pairs) >= 3 and len(press_pairs) >= 3:
+                    lockout_gap = sum(ky - hy for _, hy, ky in lockout_pairs) / len(lockout_pairs)
+                    press_gap   = sum(ky - hy for _, hy, ky in press_pairs)   / len(press_pairs)
+                    gap_change  = press_gap - lockout_gap
+                    log(f"[BP-Butt] lockout_gap={lockout_gap:.4f}  press_gap={press_gap:.4f}  change={gap_change:+.4f}")
+                    if gap_change < -0.003:
+                        butt_lift = True
+
+                if butt_lift:
+                    results['feedback'] = "Keep butt on bench — hips are lifting off"
+                    results['form_score'] = 0
+                    results['avg_form_score'] = 0
+                    results['grade'] = 'F'
+                    log("[BP-Butt] butt_lift=True → score forced to 0 (NO LIFT)")
+
         # Close video writers
         if imageio_writer:
             imageio_writer.close()  # raises RuntimeError w/ ffmpeg stderr on non-zero exit
