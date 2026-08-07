@@ -74,7 +74,10 @@ def health():
 def upload_video():
     # Support both multipart form upload and raw binary upload (React Native sends raw binary)
     exercise_type = request.args.get('exercise_type') or request.form.get('exercise_type')
+    bench_check   = request.args.get('bench_check')   or request.form.get('bench_check') or 'both'
     original_filename = request.args.get('filename', 'workout.mp4')
+    logger.info(f"[upload] exercise={exercise_type} bench_check_received={bench_check!r} "
+                f"form_keys={list(request.form.keys())} args_keys={list(request.args.keys())}")
 
     if not exercise_type:
         return jsonify({'success': False, 'error': 'No exercise type specified'})
@@ -133,6 +136,7 @@ def upload_video():
         'progress': 0,
         'filepath': filepath,
         'exercise_type': exercise_type,
+        'bench_check': bench_check,
         'reps': 0,
         'form_score': 100,
         'avg_form_score': 100,
@@ -168,7 +172,8 @@ def _process_video(video_id):
             analysis['filepath'],
             analysis['exercise_type'],
             output_json,
-            output_video
+            output_video,
+            analysis.get('bench_check', 'both'),
         ]
 
         process = subprocess.Popen(
