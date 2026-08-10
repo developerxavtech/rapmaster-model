@@ -457,7 +457,9 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
         # Real-time thresholds are unreliable (depend on camera distance, person height).
         # Post-processing uses the actual min/max of the signal → self-calibrating.
         dl_shoulder_series = []   # raw shoulder Y per analyzed frame
+        dl_torso_diff_series = []  # hip_y - shoulder_y per frame (proxy for torso extension)
         dl_reps = 0
+        dl_lockout_failed = False
 
         # Bench press: collect elbow angle series for post-processing rep count.
         # Same motivation as deadlift — fixed thresholds miss reps or count re-racks.
@@ -555,6 +557,14 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
                         if ls_v > 0.1:
                             sy = (lm[11].y + lm[12].y) / 2
                             dl_shoulder_series.append(sy)
+                            # hip_y - shoulder_y: large when torso vertical (full lockout),
+                            # small when hunched or half-standing forward-leaned.
+                            lh_v = (lm[23].visibility + lm[24].visibility) / 2
+                            if lh_v > 0.1:
+                                hy = (lm[23].y + lm[24].y) / 2
+                                dl_torso_diff_series.append(hy - sy)
+                            else:
+                                dl_torso_diff_series.append(None)
 
                     # ── YAML engine (form score + squat rep counting) ─────────
                     video_time = frame_count / fps
@@ -726,6 +736,85 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
                                 bent_count = 0
                             standing_count += 1
                     log(f"[DL] post-processing → {dl_reps} rep(s) at threshold={threshold:.3f}")
+
+                    # Engine fallback: if the state machine missed reps because the
+                    # lifter's shoulder never clearly dipped back below the 50% threshold
+                    # (i.e. incomplete lockout prevented the standing transition), use the
+                    # engine's count so the lockout quality check below can still run.
+                    if dl_reps == 0 and engine_reps > 0:
+                        dl_reps = engine_reps
+                        log(f"[DL] state machine undercounted — engine fallback: {engine_reps}")
+
+                    # Lockout quality check — two-signal approach:
+                    #   1. Shoulder Y: did shoulder rise high enough (within 30% of sig_min)?
+                    #   2. Torso extension (hip_y - shoulder_y): was the torso sufficiently
+                    #      vertical?  At a full lockout the hip is well above the shoulder
+                    #      (large diff).  When half-standing with a forward lean the diff
+                    #      shrinks even though the shoulder may be at the same Y.
+                    # Only examine frames BETWEEN the first and last bend (excludes the
+                    # pre-lift standing and the post-lift standing after bar is set down).
+                    if dl_reps > 0:
+                        DL_LOCKOUT_RATIO = 0.30
+                        required_lockout_y = sig_min + sig_range * DL_LOCKOUT_RATIO
+                        first_bend_idx = next(
+                            (i for i, v in enumerate(smoothed) if v > threshold), None
+                        )
+                        last_bend_idx = (
+                            len(smoothed) - 1 -
+                            next((i for i, v in enumerate(reversed(smoothed)) if v > threshold), -1)
+                        )
+
+                        # Smooth the torso-diff series the same way as shoulder Y.
+                        td_valid = dl_torso_diff_series  # same length as dl_shoulder_series
+                        td_smoothed = []
+                        for i in range(len(td_valid)):
+                            chunk = [v for v in td_valid[max(0, i - 5):i + 6] if v is not None]
+                            td_smoothed.append(sum(chunk) / len(chunk) if chunk else None)
+
+                        # Best (maximum) torso extension seen across the WHOLE video —
+                        # this is the reference for what "fully standing" looks like
+                        # for this person on this camera setup.
+                        td_all_valid = [v for v in td_smoothed if v is not None]
+                        td_max = max(td_all_valid) if td_all_valid else None
+
+                        if first_bend_idx is not None and last_bend_idx > first_bend_idx:
+                            # Inter-bend indices and their torso-diff companions.
+                            inter_indices = [
+                                i for i in range(first_bend_idx, last_bend_idx + 1)
+                                if smoothed[i] <= threshold
+                            ]
+                            inter_bend_standing = [smoothed[i] for i in inter_indices]
+                            inter_td = [
+                                td_smoothed[i] for i in inter_indices
+                                if i < len(td_smoothed) and td_smoothed[i] is not None
+                            ]
+
+                            if not inter_bend_standing:
+                                dl_reps = 0
+                                dl_lockout_failed = True
+                                log("[DL-Lockout] No inter-bend standing frames → No Lift")
+                            else:
+                                best_lockout = min(inter_bend_standing)
+                                lockout_pct = (best_lockout - sig_min) / sig_range * 100
+
+                                # Torso-extension check: the inter-bend torso diff must
+                                # reach ≥ 65% of the overall max seen in the whole video.
+                                # This catches forward-lean / hip-not-extended lockouts
+                                # even when the shoulder rises to near sig_min.
+                                # The shoulder-height check is intentionally omitted —
+                                # the torso ratio is a more reliable discriminator.
+                                if inter_td and td_max and td_max > 0.05:
+                                    best_td = max(inter_td)
+                                    td_ratio = best_td / td_max
+                                    log(f"[DL-Lockout] best_lockout={best_lockout:.3f} ({lockout_pct:.0f}% from standing) "
+                                        f"torso_diff={best_td:.3f}/{td_max:.3f} ({td_ratio:.0%})")
+                                    if td_ratio < 0.65:
+                                        dl_reps = 0
+                                        dl_lockout_failed = True
+                                        log(f"[DL-Lockout] Insufficient torso extension ({td_ratio:.0%} < 65%) → No Lift")
+                                else:
+                                    log(f"[DL-Lockout] best_lockout={best_lockout:.3f} ({lockout_pct:.0f}% from standing) "
+                                        f"torso_diff=N/A")
                 else:
                     log(f"[DL] movement too small ({sig_range:.3f} < 0.08) — 0 reps")
             else:
@@ -841,9 +930,96 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
                         f"No squat movement detected (knee ROM {knee_rom:.0f}°, min {min_knee:.0f}°). "
                         f"Bend your knees deeply — go below parallel."
                     )
+                else:
+                    # ── Custom rep counter ─────────────────────────────────────────
+                    # The engine's primary angle (hip-knee-ankle) requires the ankle
+                    # landmark to be visible. In portrait video the ankles are often at
+                    # the bottom of the frame with low visibility, causing the engine to
+                    # miss deep squat frames. knee_angles_tracked is collected without a
+                    # strict ankle-visibility gate, so it reliably sees the full depth.
+                    SQ_DEPTH_T   = 90    # knee ≤ this → at depth (at/below parallel)
+                    SQ_LOCKOUT_T = 153   # knee ≥ this → fully standing
+                    dt           = 6.0 / fps  # seconds per analyzed sample
+                    # Minimum samples between rep counts (mirrors min_rep_duration=0.8s)
+                    SQ_MIN_SAMP  = max(1, int(0.8 / dt))
+
+                    sq_state_c     = 'start'
+                    sq_custom_reps = 0
+                    sq_last_rep_s  = -SQ_MIN_SAMP * 10  # far in the past
+
+                    for si, ka in enumerate(knee_angles_tracked):
+                        if ka <= SQ_DEPTH_T:
+                            sq_s = 'ascent'
+                        elif ka < SQ_LOCKOUT_T:
+                            sq_s = 'descent'
+                        else:
+                            sq_s = 'start'
+
+                        if sq_s == 'ascent' and sq_state_c in ('descent', 'start'):
+                            if si - sq_last_rep_s >= SQ_MIN_SAMP:
+                                sq_custom_reps += 1
+                                sq_last_rep_s = si
+
+                        sq_state_c = sq_s
+
+                    engine_reps = results.get('reps', 0)
+                    log(f"[SQ-Custom] engine_reps={engine_reps} custom_reps={sq_custom_reps}")
+                    if sq_custom_reps > engine_reps:
+                        results['reps'] = sq_custom_reps
+                        log(f"[SQ-Custom] Engine undercounted — using custom: {sq_custom_reps}")
+
+                    # Partial squat: person moved but didn't reach depth → form failure
+                    if results.get('reps', 0) == 0 and min_knee > SQ_DEPTH_T and knee_rom > 35:
+                        results['feedback'] = "Not deep enough — squat until thighs are at least parallel to the floor"
+                        results['form_score'] = 0
+                        results['avg_form_score'] = 0
+                        results['grade'] = 'F'
+                        log(f"[Validate] Partial squat — min_knee={min_knee:.1f}° > 90°, ROM={knee_rom:.1f}° → No Lift")
             else:
                 if results['reps'] == 0:
                     _fail("Could not detect your legs. Make sure your full body is visible in the frame.")
+
+            # ── Squat lockout check ────────────────────────────────────────────────
+            # A valid squat rep requires full lockout (standing straight) between reps.
+            # Detect "consecutive bottoms without lockout" — the lifter went down,
+            # only partially stood up, then went down again without fully locking out.
+            if not results.get('wrong_exercise') and results.get('reps', 0) > 0 and len(knee_angles_tracked) >= 4:
+                SQUAT_BOTTOM   = 92    # knee angle ≤ this = at depth (matches ascent ≤ 90° + 2° buffer)
+                SQUAT_LOCKOUT  = 153   # knee angle ≥ this = fully standing (matches start > 155° − 2° buffer)
+
+                # Find all distinct "bottom" periods (runs of frames at depth)
+                sq_bottoms = []
+                in_bottom = False
+                b_start = None
+                for i, ka in enumerate(knee_angles_tracked):
+                    if ka <= SQUAT_BOTTOM:
+                        if not in_bottom:
+                            in_bottom = True
+                            b_start = i
+                    else:
+                        if in_bottom:
+                            in_bottom = False
+                            sq_bottoms.append((b_start, i - 1))
+                if in_bottom:
+                    sq_bottoms.append((b_start, len(knee_angles_tracked) - 1))
+
+                lockout_idxs = [i for i, ka in enumerate(knee_angles_tracked) if ka >= SQUAT_LOCKOUT]
+                log(f"[SQ-Lockout] bottom_periods={len(sq_bottoms)} lockout_frames={len(lockout_idxs)}")
+
+                lockout_failures = 0
+                for i in range(len(sq_bottoms) - 1):
+                    _, end1   = sq_bottoms[i]
+                    start2, _ = sq_bottoms[i + 1]
+                    if not any(end1 < idx < start2 for idx in lockout_idxs):
+                        lockout_failures += 1
+                        log(f"[SQ-Lockout] Missing lockout between bottom {i+1} and {i+2}")
+
+                if lockout_failures > 0:
+                    results['feedback'] = "Stand up fully between reps — lock out completely before going back down"
+                    results['form_score'] = 0
+                    results['avg_form_score'] = 0
+                    results['grade'] = 'F'
+                    log(f"[SQ-Lockout] {lockout_failures} lockout failure(s) → No Lift")
 
         # ── Bench press: must be lying down AND show elbow movement ──────────
         elif exercise_type == 'bench_press':
@@ -880,7 +1056,16 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
             else:
                 if results['reps'] == 0:
                     _fail("Could not detect your movement. Make sure your full body is visible.")
-        
+
+            # Incomplete lockout — lifter didn't stand straight at the top.
+            # Applied after _fail checks so it only fires when movement was real.
+            if dl_lockout_failed and not results.get('wrong_exercise'):
+                results['feedback'] = "Stand up straight at the top — lock out hips and back fully"
+                results['form_score'] = 0
+                results['avg_form_score'] = 0
+                results['grade'] = 'F'
+                log("[DL-Lockout] No Lift — incomplete lockout feedback applied")
+
         # ── Bench press form quality checks ──────────────────────────────────
         # Runs after reps + validation so it only fires on confirmed bench press sets.
         if exercise_type == 'bench_press' and not results.get('wrong_exercise'):
@@ -1077,6 +1262,7 @@ def process_video(video_path: str, exercise_type: str, output_json_path: str, ou
         if pose:
             try:
                 pose.close()
+                
             except:
                 pass
         gc.collect()

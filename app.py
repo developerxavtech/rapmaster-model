@@ -313,6 +313,6 @@ def get_processed_video(video_id):
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 8082))
     logger.info(f"Starting server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True, use_reloader=False)
